@@ -41,3 +41,8 @@ datapool_size(struct datapool *pool)
     return cc_alloc_usable_size(pool);
 }
 
+void *
+datapool_extent(struct datapool *pool, size_t size)
+{
+    return cc_alloc(size);
+}

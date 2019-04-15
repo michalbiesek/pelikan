@@ -18,7 +18,7 @@
 START_TEST(test_datapool)
 {
     int fresh = 0;
-	struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATASIZE, &fresh);
+    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATASIZE, &fresh);
     ck_assert_ptr_nonnull(pool);
     size_t s = datapool_size(pool);
     ck_assert_int_ge(s, TEST_DATASIZE);
@@ -37,7 +37,7 @@ END_TEST
 START_TEST(test_devzero)
 {
     int fresh = 0;
-	struct datapool *pool = datapool_open(NULL, TEST_DATASIZE, &fresh);
+    struct datapool *pool = datapool_open(NULL, TEST_DATASIZE, &fresh);
     ck_assert_ptr_nonnull(pool);
     size_t s = datapool_size(pool);
     ck_assert_int_ge(s, TEST_DATASIZE);
