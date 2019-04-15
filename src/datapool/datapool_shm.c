@@ -6,6 +6,7 @@
 
 #include <cc_debug.h>
 #include <cc_mm.h>
+#include <inttypes.h>
 
 struct datapool *
 datapool_open(const char *path, size_t size, int *fresh)
@@ -41,3 +42,20 @@ datapool_size(struct datapool *pool)
     return cc_alloc_usable_size(pool);
 }
 
+void *
+datapool_alloc(struct datapool *pool, size_t size)
+{
+    return cc_alloc(size);
+}
+
+void
+datapool_increment_nslab(struct datapool *pool)
+{
+
+}
+
+uint64_t
+datapool_get_nslab(struct datapool *pool)
+{
+    return 0;
+}

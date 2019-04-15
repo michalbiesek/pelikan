@@ -47,9 +47,9 @@ option(TARGET_RESPCLI "build resp-cli binary" ON)
 option(HAVE_RUST "build features written in rust" OFF)
 option(RUST_USE_MUSL "build rust deps against musl" OFF)
 option(BUILD_AND_INSTALL_CHECK "build our own version of check and link against it" OFF)
-option(USE_PMEM "build persistent memory features" OFF)
+option(USE_PMEM "build persistent memory features" ON)
 
-option(COVERAGE "code coverage" OFF)
+option(COVERAGE "code coverage" ON)
 
 # Note: duplicate custom targets only works with Makefile generators, will break XCode & VS
 # reference: http://public.kitware.com/Bug/view.php?id=6348
@@ -130,7 +130,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
 find_package(PkgConfig QUIET)
 
 if(PKG_CONFIG_FOUND)
-    pkg_check_modules(CHECK QUIET check>=0.10)
+#    pkg_check_modules(CHECK QUIET check>=0.10)
 endif()
 
 if(NOT CHECK_FOUND)

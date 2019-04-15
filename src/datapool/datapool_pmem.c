@@ -35,11 +35,13 @@ struct datapool_header {
     uint64_t version;
     uint64_t size;
     uint64_t flags;
-    uint8_t unused[DATAPOOL_HEADER_LEN - 32];
+    uint64_t slabno;
+    uint8_t unused[DATAPOOL_HEADER_LEN - 40];
 };
 
 struct datapool {
     void *addr;
+    void *offset;
 
     struct datapool_header *hdr;
     void *user_addr;
@@ -82,6 +84,16 @@ datapool_valid(struct datapool *pool)
         return false;
     }
 
+    if ((uint8_t *)pool->offset < (uint8_t *)pool->addr) {
+        log_error("datapool has wrong offset");
+        return false;
+    }
+
+    if ((uint8_t *)pool->addr + pool->mapped_len < (uint8_t *)pool->offset) {
+        log_error("datapool has wrong offset");
+        return false;
+    }
+
     if (pool->hdr->size > pool->mapped_len) {
         log_error("datapool has invalid size (is: %d, expecting: %d)",
             pool->mapped_len, pool->hdr->size);
@@ -114,6 +126,7 @@ datapool_initialize(struct datapool *pool)
     pool->hdr->version = DATAPOOL_VERSION;
     pool->hdr->size = pool->mapped_len;
     pool->hdr->flags = 0;
+    pool->hdr->slabno = 0;
     datapool_sync_hdr(pool);
 
     /* 3. set the signature */
@@ -162,6 +175,7 @@ datapool_open(const char *path, size_t size, int *fresh)
         pool->addr = pmem_map_file(path, map_size, PMEM_FILE_CREATE, 0600,
             &pool->mapped_len, &pool->is_pmem);
         pool->file_backed = 1;
+        pool->offset = 0;
     }
 
     if (pool->addr == NULL) {
@@ -174,7 +188,7 @@ datapool_open(const char *path, size_t size, int *fresh)
 
     pool->hdr = pool->addr;
     pool->user_addr = (uint8_t *)pool->addr + sizeof(struct datapool_header);
-
+    pool->offset = pool->user_addr;
     if (fresh) {
         *fresh = 0;
     }
@@ -217,6 +231,27 @@ void *
 datapool_addr(struct datapool *pool)
 {
     return pool->user_addr;
+}
+
+void
+datapool_increment_nslab(struct datapool *pool)
+{
+    pool->hdr->slabno++;
+    datapool_sync_hdr(pool);
+}
+
+uint64_t
+datapool_get_nslab(struct datapool *pool)
+{
+    return pool->hdr->slabno;
+}
+
+void *
+datapool_alloc(struct datapool *pool, size_t size)
+{
+    void *temp = pool->offset;
+    pool->offset = (uint8_t *)pool->offset + size;
+    return temp;
 }
 
 size_t
