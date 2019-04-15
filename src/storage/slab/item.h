@@ -212,3 +212,5 @@ bool item_delete(const struct bstring *key);
 
 /* flush the cache */
 void item_flush(void);
+
+void item_insert_all(void);

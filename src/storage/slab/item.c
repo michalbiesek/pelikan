@@ -140,6 +140,22 @@ item_insert(struct item *it, const struct bstring *key)
         key->data);
 }
 
+void
+item_insert_all(void)
+{
+    uint8_t id;      /* slabclass id */
+
+    ASSERT(profile_last_id <= SLABCLASS_MAX_ID);
+
+    for (id = SLABCLASS_MIN_ID; id <= profile_last_id; id++) {
+           struct item *it = slab_get_item_after_reset(id);
+           if ( it->create_at != 0) {
+             slab_ref(item_to_slab(it));
+             _item_link(it);
+           }
+    }
+}
+
 /*
  * Unlinks an item from the hash table.
  */
