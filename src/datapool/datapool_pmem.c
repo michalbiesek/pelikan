@@ -40,6 +40,7 @@ struct datapool_header {
 
 struct datapool {
     void *addr;
+    void *offset;
 
     struct datapool_header *hdr;
     void *user_addr;
@@ -79,6 +80,16 @@ datapool_valid(struct datapool *pool)
 
     if (pool->hdr->size == 0) {
         log_error("datapool has 0 size");
+        return false;
+    }
+
+    if ((uint8_t *)pool->offset < (uint8_t *)pool->addr) {
+        log_error("datapool has wrong offset");
+        return false;
+    }
+
+    if ((uint8_t *)pool->addr + pool->mapped_len < (uint8_t *)pool->offset) {
+        log_error("datapool has wrong offset");
         return false;
     }
 
@@ -162,6 +173,7 @@ datapool_open(const char *path, size_t size, int *fresh)
         pool->addr = pmem_map_file(path, map_size, PMEM_FILE_CREATE, 0600,
             &pool->mapped_len, &pool->is_pmem);
         pool->file_backed = 1;
+        pool->offset = 0;
     }
 
     if (pool->addr == NULL) {
@@ -174,7 +186,7 @@ datapool_open(const char *path, size_t size, int *fresh)
 
     pool->hdr = pool->addr;
     pool->user_addr = (uint8_t *)pool->addr + sizeof(struct datapool_header);
-
+    pool->offset = pool->user_addr;
     if (fresh) {
         *fresh = 0;
     }
@@ -217,6 +229,17 @@ void *
 datapool_addr(struct datapool *pool)
 {
     return pool->user_addr;
+}
+
+void *
+datapool_extent(struct datapool *pool, size_t size)
+{
+    if (pool == NULL) { /* fallback to DRAM if pool is not configured */
+        return cc_alloc(size);
+    }
+    void *temp = pool->offset;
+    pool->offset = (uint8_t *)pool->offset + size;
+    return temp;
 }
 
 size_t

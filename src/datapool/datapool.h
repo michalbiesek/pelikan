@@ -10,3 +10,4 @@ void datapool_close(struct datapool *pool);
 
 void *datapool_addr(struct datapool *pool);
 size_t datapool_size(struct datapool *pool);
+void * datapool_extent(struct datapool *pool, size_t size);
