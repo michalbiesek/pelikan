@@ -177,6 +177,9 @@ _slab_slabclass_teardown(void)
 {
 }
 
+static void
+_slab_table_update(struct slab *slab);
+
 /*
  * Initialize slab heap related info
  *
@@ -195,9 +198,11 @@ _slab_heapinfo_setup(int fresh)
     if (prealloc) {
         if (fresh) {
             heapinfo.base = datapool_alloc(pool_slab, heapinfo.max_nslab * slab_size);
+            printf("heapinfo.base address=%p\n",heapinfo.base);
         }
         else {
             heapinfo.base = datapool_addr(pool_slab);
+            printf("heapinfo.base address=%p\n",heapinfo.base);
         }
         if (heapinfo.base == NULL) {
             log_error("pre-alloc %zu bytes for %"PRIu32" slabs failed: %s",
@@ -224,7 +229,15 @@ _slab_heapinfo_setup(int fresh)
 
    //recreate slab table
     if (!fresh) {
-
+        struct slab *slab_iterator = datapool_addr(pool_slab);
+        //TODO: store # of slabs somewhere in datapool header
+        for(int i=0;i<heapinfo.max_nslab;i++)
+        {
+            printf("slab_address %d=%p\n",i,slab_iterator);
+            slab_iterator += slab_size;
+            _slab_table_update(slab_iterator);
+            //TODO: iterate all items in slab
+        }
     }
 
     return CC_OK;
@@ -468,7 +481,7 @@ slab_setup(slab_options_st *options, slab_metrics_st *metrics)
     }
 
     if (!fresh) {
-        item_insert_all();
+        //item_insert_all();
     }
 
     slab_init = true;
