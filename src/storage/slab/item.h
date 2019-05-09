@@ -47,9 +47,9 @@
  * - data
  */
 struct item {
-#if defined CC_ASSERT_PANIC || defined CC_ASSERT_LOG
+//#if defined CC_ASSERT_PANIC || defined CC_ASSERT_LOG
     uint32_t          magic;         /* item magic (const) */
-#endif
+//#endif
     SLIST_ENTRY(item) i_sle;         /* link in hash/freeq */
     proc_time_i       expire_at;     /* expiry time in secs */
     proc_time_i       create_at;     /* time when this item was last linked */
@@ -212,3 +212,6 @@ bool item_delete(const struct bstring *key);
 
 /* flush the cache */
 void item_flush(void);
+
+/* Restore item after reset */
+void item_restore_after_reset(struct item *it);
