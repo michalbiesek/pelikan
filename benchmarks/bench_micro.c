@@ -16,7 +16,7 @@
 static slab_metrics_st metrics = { SLAB_METRIC(METRIC_INIT) };
 static slab_options_st options = { SLAB_OPTION(OPTION_INIT) };
 //static unsigned slab_mem_config = 1012130560;
-#define DATAPOOL_PATH "/mnt/pmem12/slab_datapool.pelikan"
+//#define DATAPOOL_PATH "/mnt/pmem12/slab_datapool.pelikan"
 static __thread unsigned int rseed = 1234; /* XXX: make this an option */
 
 #define RRAND(min, max) (rand_r(&(rseed)) % ((max) - (min) + 1) + (min))
@@ -166,7 +166,7 @@ benchmark_slab_init(struct benchmark *b)
 {
     option_load_default((struct option *)&options, OPTION_CARDINALITY(options));
 //    options.slab_mem.val.vuint = slab_mem_config;
-    options.slab_datapool.val.vstr = DATAPOOL_PATH;
+//    options.slab_datapool.val.vstr = DATAPOOL_PATH;
 //    options.slab_size.val.vuint = MY_SLAB_SIZE;
 //    options.slab_mem.val.vuint = MY_SLAB_MAXBYTES;
 //    options.slab_evict_opt.val.vuint = EVICT_CS;
