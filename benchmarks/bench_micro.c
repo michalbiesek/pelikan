@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <pthread.h>
 
+#include "bench_storage/storage.h"
 #include <storage/slab/item.h>
 #include <storage/slab/slab.h>
 //#include <storage/cuckoo/item.h>
@@ -15,6 +16,8 @@
 #include <cc_array.h>
 static slab_metrics_st metrics = { SLAB_METRIC(METRIC_INIT) };
 static slab_options_st options = { SLAB_OPTION(OPTION_INIT) };
+//static unsigned slab_mem_config = 1012130560;
+//#define DATAPOOL_PATH "/mnt/pmem12/slab_datapool.pelikan"
 static __thread unsigned int rseed = 1234; /* XXX: make this an option */
 
 #define RRAND(min, max) (rand_r(&(rseed)) % ((max) - (min) + 1) + (min))
@@ -26,8 +29,8 @@ static __thread unsigned int rseed = 1234; /* XXX: make this an option */
 } while (0)
 
 #define BENCHMARK_OPTION(ACTION)\
-    ACTION(entry_min_size,  OPTION_TYPE_UINT, 64,    "Min size of cache entry")\
-    ACTION(entry_max_size,  OPTION_TYPE_UINT, 64,    "Max size of cache entry")\
+    ACTION(entry_min_size,  OPTION_TYPE_UINT, 256,    "Min size of cache entry")\
+    ACTION(entry_max_size,  OPTION_TYPE_UINT, 256,    "Max size of cache entry")\
     ACTION(nentries,        OPTION_TYPE_UINT, 1000,  "Max total number of cache entries" )\
     ACTION(nops,            OPTION_TYPE_UINT, 100000,"Total number of operations")\
     ACTION(pct_get,         OPTION_TYPE_UINT, 80,    "% of gets")\
@@ -145,40 +148,18 @@ benchmark_entries_delete(struct benchmark *b)
     cc_free(b->entries);
 }
 
-//static int
-//benchmark_cuckoo_init(struct benchmark *b)
-//{
-//    cuckoo_options_st options = { CUCKOO_OPTION(OPTION_INIT) };
-//    static cuckoo_metrics_st metrics = { CUCKOO_METRIC(METRIC_INIT) };
-//    options.cuckoo_policy.val.vuint = CUCKOO_POLICY_EXPIRE;
-//    options.cuckoo_item_size.val.vuint = O(b, entry_max_size) + ITEM_OVERHEAD;
-//    options.cuckoo_nitem.val.vuint = O(b, nentries);
-
-//    cuckoo_setup(&options, &metrics);
-
-//    return 0;
-//}
-
 static int
-benchmark_slab_init(struct benchmark *b)
+benchmark_slab_init(void)
 {
     option_load_default((struct option *)&options, OPTION_CARDINALITY(options));
-
+    options.slab_evict_opt.val.vuint = EVICT_NONE;
     slab_setup(&options, &metrics);
 
     return 0;
 }
 
-
 static rstatus_i
-benchmark_slab_deinit(struct benchmark *b)
-{
-    slab_teardown();
-    return CC_OK;
-}
-
-static rstatus_i
-benchmark_slab_put(struct benchmark *b, struct benchmark_entry *e)
+benchmark_slab_put(struct benchmark_entry *e)
 {
     struct bstring key;
     struct bstring val;
@@ -195,7 +176,7 @@ benchmark_slab_put(struct benchmark *b, struct benchmark_entry *e)
 }
 
 static rstatus_i
-benchmark_slab_get(struct benchmark *b, struct benchmark_entry *e)
+benchmark_slab_get(struct benchmark_entry *e)
 {
     struct bstring key;
     bstring_set_cstr(&key, e->key);
@@ -205,7 +186,7 @@ benchmark_slab_get(struct benchmark *b, struct benchmark_entry *e)
 }
 
 static rstatus_i
-benchmark_slab_rem(struct benchmark *b, struct benchmark_entry *e)
+benchmark_slab_rem(struct benchmark_entry *e)
 {
     struct bstring key;
     bstring_set_cstr(&key, e->key);
@@ -213,34 +194,20 @@ benchmark_slab_rem(struct benchmark *b, struct benchmark_entry *e)
     return item_delete(&key) ? CC_OK : CC_EEMPTY;
 }
 
-enum benchmark_storage_engines {
-//    BENCHMARK_CUCKOO,
-    BENCHMARK_SLAB,
-    MAX_BENCHMARK_STORAGE_ENGINES
-};
+typedef struct {
+    rstatus_i (*init)(void);
+    rstatus_i (*deinit)(void);
+    rstatus_i (*put)(struct benchmark_entry *e);
+    rstatus_i (*get)(struct benchmark_entry *e);
+    rstatus_i (*rem)(struct benchmark_entry *e);
+} bench_engine_ops;
 
-static struct bench_engine_ops {
-    rstatus_i (*init)(struct benchmark *b);
-    rstatus_i (*deinit)(struct benchmark *b);
-    rstatus_i (*put)(struct benchmark *b, struct benchmark_entry *e);
-    rstatus_i (*get)(struct benchmark *b, struct benchmark_entry *e);
-    rstatus_i (*rem)(struct benchmark *b, struct benchmark_entry *e);
-} bench_engines[MAX_BENCHMARK_STORAGE_ENGINES] = {
-//    [BENCHMARK_CUCKOO] = {
-//        .init = benchmark_cuckoo_init,
-//        .deinit = benchmark_cuckoo_deinit,
-//        .put = benchmark_cuckoo_put,
-//        .get = benchmark_cuckoo_get,
-//        .rem = benchmark_cuckoo_rem,
-//    }
-        [BENCHMARK_SLAB] = {
+static bench_engine_ops storage_ops = {
         .init = benchmark_slab_init,
-        .deinit = benchmark_slab_deinit,
+        .deinit = benchmark_deinit,
         .put = benchmark_slab_put,
         .get = benchmark_slab_get,
         .rem = benchmark_slab_rem,
-    }
-
 };
 
 static void
@@ -251,9 +218,9 @@ benchmark_print_summary(struct benchmark *b, struct duration *d)
 }
 
 static struct duration
-benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
+benchmark_run(struct benchmark *b, bench_engine_ops *ops)
 {
-    ops->init(b);
+    ops->init();
 
     struct array *in;
     struct array *in2;
@@ -270,7 +237,7 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
         struct benchmark_entry **e = array_push(in);
         *e = &b->entries[i];
 
-        ASSERT(ops->put(b, *e) == CC_OK);
+        ASSERT(ops->put(*e) == CC_OK);
     }
 
     struct duration d;
@@ -282,14 +249,14 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
             /* XXX: array_shuffle(in) */
         }
 
-        unsigned pct = RRAND(0, 100);
+        unsigned pct = RRAND(0, 10000);
 
         unsigned pct_sum = 0;
         if (pct_sum <= pct && pct < O(b, pct_get) + pct_sum) {
             ASSERT(array_nelem(in) != 0);
             struct benchmark_entry **e = array_pop(in);
 
-            if (ops->get(b, *e) != CC_OK) {
+            if (ops->get(*e) != CC_OK) {
                 log_info("benchmark get() failed");
             }
 
@@ -304,12 +271,12 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
             } else {
                 ASSERT(array_nelem(in) != 0);
                 e = array_pop(in);
-                if (ops->rem(b, *e) != CC_OK) {
+                if (ops->rem(*e) != CC_OK) {
                     log_info("benchmark rem() failed");
                 }
             }
 
-            if (ops->put(b, *e) != CC_OK) {
+            if (ops->put(*e) != CC_OK) {
                 log_info("benchmark put() failed");
             }
 
@@ -321,7 +288,7 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
             ASSERT(array_nelem(in) != 0);
             struct benchmark_entry **e = array_pop(in);
 
-            if (ops->rem(b, *e) != CC_OK) {
+            if (ops->rem(*e) != CC_OK) {
                 log_info("benchmark rem() failed");
             }
 
@@ -332,7 +299,7 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
 
     duration_stop(&d);
 
-    ops->deinit(b);
+    ops->deinit();
 
     return d;
 }
@@ -348,7 +315,7 @@ main(int argc, char *argv[])
 
     benchmark_entries_populate(&b);
 
-    struct duration d = benchmark_run(&b, &bench_engines[BENCHMARK_SLAB]);
+    struct duration d = benchmark_run(&b, &storage_ops);
 
     benchmark_print_summary(&b, &d);
 
