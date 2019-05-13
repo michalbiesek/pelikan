@@ -5,13 +5,16 @@
 #include <errno.h>
 #include <pthread.h>
 
-#include <storage/cuckoo/item.h>
-#include <storage/cuckoo/cuckoo.h>
+#include <storage/slab/item.h>
+#include <storage/slab/slab.h>
+//#include <storage/cuckoo/item.h>
+//#include <storage/cuckoo/cuckoo.h>
 #include <time/cc_timer.h>
 #include <cc_debug.h>
 #include <cc_mm.h>
 #include <cc_array.h>
-
+static slab_metrics_st metrics = { SLAB_METRIC(METRIC_INIT) };
+static slab_options_st options = { SLAB_OPTION(OPTION_INIT) };
 static __thread unsigned int rseed = 1234; /* XXX: make this an option */
 
 #define RRAND(min, max) (rand_r(&(rseed)) % ((max) - (min) + 1) + (min))
@@ -142,63 +145,77 @@ benchmark_entries_delete(struct benchmark *b)
     cc_free(b->entries);
 }
 
-static int
-benchmark_cuckoo_init(struct benchmark *b)
-{
-    cuckoo_options_st options = { CUCKOO_OPTION(OPTION_INIT) };
-    static cuckoo_metrics_st metrics = { CUCKOO_METRIC(METRIC_INIT) };
-    options.cuckoo_policy.val.vuint = CUCKOO_POLICY_EXPIRE;
-    options.cuckoo_item_size.val.vuint = O(b, entry_max_size) + ITEM_OVERHEAD;
-    options.cuckoo_nitem.val.vuint = O(b, nentries);
+//static int
+//benchmark_cuckoo_init(struct benchmark *b)
+//{
+//    cuckoo_options_st options = { CUCKOO_OPTION(OPTION_INIT) };
+//    static cuckoo_metrics_st metrics = { CUCKOO_METRIC(METRIC_INIT) };
+//    options.cuckoo_policy.val.vuint = CUCKOO_POLICY_EXPIRE;
+//    options.cuckoo_item_size.val.vuint = O(b, entry_max_size) + ITEM_OVERHEAD;
+//    options.cuckoo_nitem.val.vuint = O(b, nentries);
 
-    cuckoo_setup(&options, &metrics);
+//    cuckoo_setup(&options, &metrics);
+
+//    return 0;
+//}
+
+static int
+benchmark_slab_init(struct benchmark *b)
+{
+    option_load_default((struct option *)&options, OPTION_CARDINALITY(options));
+
+    slab_setup(&options, &metrics);
 
     return 0;
 }
 
+
 static rstatus_i
-benchmark_cuckoo_deinit(struct benchmark *b)
+benchmark_slab_deinit(struct benchmark *b)
 {
-    cuckoo_teardown();
+    slab_teardown();
     return CC_OK;
 }
 
 static rstatus_i
-benchmark_cuckoo_put(struct benchmark *b, struct benchmark_entry *e)
+benchmark_slab_put(struct benchmark *b, struct benchmark_entry *e)
 {
     struct bstring key;
-    struct val val;
-    val.type = VAL_TYPE_STR;
-    bstring_set_cstr(&val.vstr, e->value);
+    struct bstring val;
+    struct item *it;
+
+    bstring_set_cstr(&val, e->value);
     bstring_set_cstr(&key, e->key);
 
-    struct item *it = cuckoo_insert(&key, &val, INT32_MAX);
+    item_rstatus_e status = item_reserve(&it, &key, &val, val.len, 0, INT32_MAX);
 
-    return it != NULL ? CC_OK : CC_ENOMEM;
+    item_insert(it, &key);
+
+    return status == ITEM_OK ? CC_OK : CC_ENOMEM;
 }
 
 static rstatus_i
-benchmark_cuckoo_get(struct benchmark *b, struct benchmark_entry *e)
+benchmark_slab_get(struct benchmark *b, struct benchmark_entry *e)
 {
     struct bstring key;
     bstring_set_cstr(&key, e->key);
-    struct item *it = cuckoo_get(&key);
+    struct item *it = item_get(&key);
 
     return it != NULL ? CC_OK : CC_EEMPTY;
 }
 
 static rstatus_i
-benchmark_cuckoo_rem(struct benchmark *b, struct benchmark_entry *e)
+benchmark_slab_rem(struct benchmark *b, struct benchmark_entry *e)
 {
     struct bstring key;
     bstring_set_cstr(&key, e->key);
 
-    return cuckoo_delete(&key) ? CC_OK : CC_EEMPTY;
+    return item_delete(&key) ? CC_OK : CC_EEMPTY;
 }
 
 enum benchmark_storage_engines {
-    BENCHMARK_CUCKOO,
-
+//    BENCHMARK_CUCKOO,
+    BENCHMARK_SLAB,
     MAX_BENCHMARK_STORAGE_ENGINES
 };
 
@@ -209,13 +226,21 @@ static struct bench_engine_ops {
     rstatus_i (*get)(struct benchmark *b, struct benchmark_entry *e);
     rstatus_i (*rem)(struct benchmark *b, struct benchmark_entry *e);
 } bench_engines[MAX_BENCHMARK_STORAGE_ENGINES] = {
-    [BENCHMARK_CUCKOO] = {
-        .init = benchmark_cuckoo_init,
-        .deinit = benchmark_cuckoo_deinit,
-        .put = benchmark_cuckoo_put,
-        .get = benchmark_cuckoo_get,
-        .rem = benchmark_cuckoo_rem,
+//    [BENCHMARK_CUCKOO] = {
+//        .init = benchmark_cuckoo_init,
+//        .deinit = benchmark_cuckoo_deinit,
+//        .put = benchmark_cuckoo_put,
+//        .get = benchmark_cuckoo_get,
+//        .rem = benchmark_cuckoo_rem,
+//    }
+        [BENCHMARK_SLAB] = {
+        .init = benchmark_slab_init,
+        .deinit = benchmark_slab_deinit,
+        .put = benchmark_slab_put,
+        .get = benchmark_slab_get,
+        .rem = benchmark_slab_rem,
     }
+
 };
 
 static void
@@ -323,7 +348,7 @@ main(int argc, char *argv[])
 
     benchmark_entries_populate(&b);
 
-    struct duration d = benchmark_run(&b, &bench_engines[BENCHMARK_CUCKOO]);
+    struct duration d = benchmark_run(&b, &bench_engines[BENCHMARK_SLAB]);
 
     benchmark_print_summary(&b, &d);
 

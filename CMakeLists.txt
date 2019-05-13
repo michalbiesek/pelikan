@@ -47,7 +47,7 @@ option(TARGET_RESPCLI "build resp-cli binary" ON)
 option(HAVE_RUST "build features written in rust" OFF)
 option(RUST_USE_MUSL "build rust deps against musl" OFF)
 option(BUILD_AND_INSTALL_CHECK "build our own version of check and link against it" OFF)
-option(USE_PMEM "build persistent memory features" ON)
+option(USE_PMEM "build persistent memory features" OFF)
 
 option(COVERAGE "code coverage" OFF)
 
