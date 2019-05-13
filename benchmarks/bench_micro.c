@@ -44,12 +44,11 @@ struct benchmark_entry {
 };
 
 struct benchmark_specific {
-    BENCHMARK_OPTION(OPTION_DECLARE);
+    BENCHMARK_OPTION(OPTION_DECLARE)
 };
 
 struct benchmark_options {
     struct benchmark_specific benchmark;
-    cuckoo_options_st cuckoo;
 };
 
 struct benchmark {
@@ -64,9 +63,7 @@ benchmark_create(struct benchmark *b, const char *config)
     b->entries = NULL;
 
     struct benchmark_specific opts1 = { BENCHMARK_OPTION(OPTION_INIT) };
-    cuckoo_options_st opts2 = { CUCKOO_OPTION(OPTION_INIT) };
     b->options.benchmark = opts1;
-    b->options.cuckoo = opts2;
 
     size_t nopts = OPTION_CARDINALITY(struct benchmark_options);
     option_load_default((struct option *)&b->options, nopts);
@@ -107,8 +104,8 @@ benchmark_entry_create(benchmark_key_u key, size_t size)
     e.value = cc_alloc(e.value_size);
     ASSERT(e.value != NULL);
 
-    memcpy(e.key, &key, e.key_size);
-    e.key[e.key_size - 1] = 0;
+    int ret = snprintf(e.key, e.key_size, "%zu", key);
+    ASSERT(ret > 0);
 
     memset(e.value, 'a', e.value_size);
     e.value[e.value_size - 1] = 0;
@@ -148,13 +145,13 @@ benchmark_entries_delete(struct benchmark *b)
 static int
 benchmark_cuckoo_init(struct benchmark *b)
 {
-    cuckoo_options_st *options = &b->options.cuckoo;
+    cuckoo_options_st options = { CUCKOO_OPTION(OPTION_INIT) };
     static cuckoo_metrics_st metrics = { CUCKOO_METRIC(METRIC_INIT) };
-    options->cuckoo_policy.val.vuint = CUCKOO_POLICY_EXPIRE;
-    options->cuckoo_item_size.val.vuint = O(b, entry_max_size) + ITEM_OVERHEAD;
-    options->cuckoo_nitem.val.vuint = O(b, nentries);
+    options.cuckoo_policy.val.vuint = CUCKOO_POLICY_EXPIRE;
+    options.cuckoo_item_size.val.vuint = O(b, entry_max_size) + ITEM_OVERHEAD;
+    options.cuckoo_nitem.val.vuint = O(b, nentries);
 
-    cuckoo_setup(options, &metrics);
+    cuckoo_setup(&options, &metrics);
 
     return 0;
 }
@@ -244,7 +241,7 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
     array_create(&in2, nentries, sizeof(struct benchmark_entry *));
     array_create(&out, nentries, sizeof(struct benchmark_entry *));
 
-    for (int i = 0; i < nentries; ++i) {
+    for (size_t i = 0; i < nentries; ++i) {
         struct benchmark_entry **e = array_push(in);
         *e = &b->entries[i];
 
@@ -260,9 +257,9 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
             /* XXX: array_shuffle(in) */
         }
 
-        int pct = RRAND(0, 100);
+        unsigned pct = RRAND(0, 100);
 
-        int pct_sum = 0;
+        unsigned pct_sum = 0;
         if (pct_sum <= pct && pct < O(b, pct_get) + pct_sum) {
             ASSERT(array_nelem(in) != 0);
             struct benchmark_entry **e = array_pop(in);
