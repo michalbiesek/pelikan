@@ -15,6 +15,8 @@
 #include <cc_array.h>
 static slab_metrics_st metrics = { SLAB_METRIC(METRIC_INIT) };
 static slab_options_st options = { SLAB_OPTION(OPTION_INIT) };
+//static unsigned slab_mem_config = 1012130560;
+//#define DATAPOOL_PATH "/mnt/pmem/slab_datapool.pelikan"
 static __thread unsigned int rseed = 1234; /* XXX: make this an option */
 
 #define RRAND(min, max) (rand_r(&(rseed)) % ((max) - (min) + 1) + (min))
@@ -28,11 +30,11 @@ static __thread unsigned int rseed = 1234; /* XXX: make this an option */
 #define BENCHMARK_OPTION(ACTION)\
     ACTION(entry_min_size,  OPTION_TYPE_UINT, 64,    "Min size of cache entry")\
     ACTION(entry_max_size,  OPTION_TYPE_UINT, 64,    "Max size of cache entry")\
-    ACTION(nentries,        OPTION_TYPE_UINT, 1000,  "Max total number of cache entries" )\
-    ACTION(nops,            OPTION_TYPE_UINT, 100000,"Total number of operations")\
-    ACTION(pct_get,         OPTION_TYPE_UINT, 80,    "% of gets")\
-    ACTION(pct_put,         OPTION_TYPE_UINT, 10,    "% of puts")\
-    ACTION(pct_rem,         OPTION_TYPE_UINT, 10,    "% of removes")
+    ACTION(nentries,        OPTION_TYPE_UINT, 1000000,  "Max total number of cache entries" )\
+    ACTION(nops,            OPTION_TYPE_UINT, 100000000,"Total number of operations")\
+    ACTION(pct_get,         OPTION_TYPE_UINT, 80000,    "% of gets")\
+    ACTION(pct_put,         OPTION_TYPE_UINT, 10000,    "% of puts")\
+    ACTION(pct_rem,         OPTION_TYPE_UINT, 10000,    "% of removes")
 
 #define O(b, opt) option_uint(&(b->options.benchmark.opt))
 
@@ -163,6 +165,12 @@ static int
 benchmark_slab_init(struct benchmark *b)
 {
     option_load_default((struct option *)&options, OPTION_CARDINALITY(options));
+//    options.slab_mem.val.vuint = slab_mem_config;
+//    options.slab_datapool.val.vstr = DATAPOOL_PATH;
+//    options.slab_size.val.vuint = MY_SLAB_SIZE;
+//    options.slab_mem.val.vuint = MY_SLAB_MAXBYTES;
+//    options.slab_evict_opt.val.vuint = EVICT_CS;
+//    options.slab_item_max.val.vuint = MY_SLAB_SIZE - SLAB_HDR_SIZE;
 
     slab_setup(&options, &metrics);
 
@@ -282,7 +290,7 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
             /* XXX: array_shuffle(in) */
         }
 
-        unsigned pct = RRAND(0, 100);
+        unsigned pct = RRAND(0, 10000);
 
         unsigned pct_sum = 0;
         if (pct_sum <= pct && pct < O(b, pct_get) + pct_sum) {
