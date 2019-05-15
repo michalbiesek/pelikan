@@ -119,8 +119,6 @@ _slab_iterate_over_all_items(struct slab *slab)
 
     p = &slabclass[slab->id];
 
-    _slab_lruq_append(slab);
-
     for (i = 0; i < p->nitem; i++) {
         it = _slab_to_item(slab, i, p->size);
         if (it->is_linked) {
@@ -193,17 +191,19 @@ static void
 _slab_recreate (void)
 {
     uint32_t i;
-    struct slab *slab_iterator = datapool_addr(pool_slab);
+    uint8_t * heap_calculate = datapool_addr(pool_slab);
     for(i = 0; i < heapinfo.max_nslab; i++) {
+        struct slab *slab_iterator = ( struct slab *) heap_calculate;
         if (slab_iterator->magic == SLAB_MAGIC) {
             INCR(slab_metrics, slab_req);
             _slab_table_update(slab_iterator);
             INCR(slab_metrics, slab_curr);
             PERSLAB_INCR(slab_iterator->id, slab_curr);
             INCR_N(slab_metrics, slab_memory, slab_size);
+            _slab_lruq_append(slab_iterator);
             _slab_iterate_over_all_items(slab_iterator);
-            slab_iterator += slab_size;
         }
+        heap_calculate += slab_size;
     }
 }
 
@@ -623,14 +623,14 @@ _slab_lruq_head(void)
 static void
 _slab_lruq_append(struct slab *slab)
 {
-    log_vverb("append slab %p with id %d from lruq", slab, slab->id);
+    loga("append slab %p with id %d from lruq", slab, slab->id);
     TAILQ_INSERT_TAIL(&heapinfo.slab_lruq, slab, s_tqe);
 }
 
 static void
 _slab_lruq_remove(struct slab *slab)
 {
-    log_vverb("remove slab %p with id %d from lruq", slab, slab->id);
+    loga("remove slab %p with id %d from lruq", slab, slab->id);
     TAILQ_REMOVE(&heapinfo.slab_lruq, slab, s_tqe);
 }
 

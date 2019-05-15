@@ -7,24 +7,26 @@ static slab_metrics_st metrics = { SLAB_METRIC(METRIC_INIT) };
 static slab_options_st options = { SLAB_OPTION(OPTION_INIT) };
 
 rstatus_i
-benchmark_init(size_t item_size, size_t nentries)
+bench_storage_init(size_t item_size, size_t nentries)
 {
     option_load_default((struct option *)&options, OPTION_CARDINALITY(options));
     options.slab_evict_opt.val.vuint = EVICT_NONE;
+//    options.slab_item_min.val.vuint = item_size;
+//    options.slab_item_max.val.vuint = item_size;
     slab_setup(&options, &metrics);
 
     return CC_OK;
 }
 
 rstatus_i
-benchmark_deinit(void)
+bench_storage_deinit(void)
 {
     slab_teardown();
     return CC_OK;
 }
 
 rstatus_i
-benchmark_put(struct benchmark_entry *e)
+bench_storage_put(struct benchmark_entry *e)
 {
     struct bstring key;
     struct bstring val;
@@ -41,7 +43,7 @@ benchmark_put(struct benchmark_entry *e)
 }
 
 rstatus_i
-benchmark_get(struct benchmark_entry *e)
+bench_storage_get(struct benchmark_entry *e)
 {
     struct bstring key;
     bstring_set_cstr(&key, e->key);
@@ -51,7 +53,7 @@ benchmark_get(struct benchmark_entry *e)
 }
 
 rstatus_i
-benchmark_rem(struct benchmark_entry *e)
+bench_storage_rem(struct benchmark_entry *e)
 {
     struct bstring key;
     bstring_set_cstr(&key, e->key);

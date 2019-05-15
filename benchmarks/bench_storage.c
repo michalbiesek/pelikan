@@ -131,22 +131,6 @@ benchmark_entries_delete(struct benchmark *b)
     cc_free(b->entries);
 }
 
-typedef struct {
-    rstatus_i (*init)(size_t item_size, size_t nentries);
-    rstatus_i (*deinit)(void);
-    rstatus_i (*put)(struct benchmark_entry *e);
-    rstatus_i (*get)(struct benchmark_entry *e);
-    rstatus_i (*rem)(struct benchmark_entry *e);
-} bench_engine_ops;
-
-static bench_engine_ops storage_ops = {
-        .init = benchmark_init,
-        .deinit = benchmark_deinit,
-        .put = benchmark_put,
-        .get = benchmark_get,
-        .rem = benchmark_rem,
-};
-
 static void
 benchmark_print_summary(struct benchmark *b, struct duration *d)
 {
@@ -155,7 +139,7 @@ benchmark_print_summary(struct benchmark *b, struct duration *d)
 }
 
 static struct duration
-benchmark_run(struct benchmark *b, bench_engine_ops *ops)
+benchmark_run(struct benchmark *b)
 {
     struct array *in;
     struct array *in2;
@@ -164,7 +148,7 @@ benchmark_run(struct benchmark *b, bench_engine_ops *ops)
 
     size_t nentries = O(b, nentries);
 
-    ops->init(O(b, entry_max_size),nentries);
+    bench_storage_init(O(b, entry_max_size),nentries);
 
     array_create(&in, nentries, sizeof(struct benchmark_entry *));
     array_create(&in2, nentries, sizeof(struct benchmark_entry *));
@@ -174,7 +158,7 @@ benchmark_run(struct benchmark *b, bench_engine_ops *ops)
         struct benchmark_entry **e = array_push(in);
         *e = &b->entries[i];
 
-        ASSERT(ops->put(*e) == CC_OK);
+        ASSERT(bench_storage_put(*e) == CC_OK);
     }
 
     struct duration d;
@@ -193,7 +177,7 @@ benchmark_run(struct benchmark *b, bench_engine_ops *ops)
             ASSERT(array_nelem(in) != 0);
             struct benchmark_entry **e = array_pop(in);
 
-            if (ops->get(*e) != CC_OK) {
+            if (bench_storage_get(*e) != CC_OK) {
                 log_info("benchmark get() failed");
             }
 
@@ -208,12 +192,12 @@ benchmark_run(struct benchmark *b, bench_engine_ops *ops)
             } else {
                 ASSERT(array_nelem(in) != 0);
                 e = array_pop(in);
-                if (ops->rem(*e) != CC_OK) {
+                if (bench_storage_rem(*e) != CC_OK) {
                     log_info("benchmark rem() failed");
                 }
             }
 
-            if (ops->put(*e) != CC_OK) {
+            if (bench_storage_put(*e) != CC_OK) {
                 log_info("benchmark put() failed");
             }
 
@@ -225,7 +209,7 @@ benchmark_run(struct benchmark *b, bench_engine_ops *ops)
             ASSERT(array_nelem(in) != 0);
             struct benchmark_entry **e = array_pop(in);
 
-            if (ops->rem(*e) != CC_OK) {
+            if (bench_storage_rem(*e) != CC_OK) {
                 log_info("benchmark rem() failed");
             }
 
@@ -236,7 +220,7 @@ benchmark_run(struct benchmark *b, bench_engine_ops *ops)
 
     duration_stop(&d);
 
-    ops->deinit();
+    bench_storage_deinit();
 
     return d;
 }
@@ -252,7 +236,7 @@ main(int argc, char *argv[])
 
     benchmark_entries_populate(&b);
 
-    struct duration d = benchmark_run(&b, &storage_ops);
+    struct duration d = benchmark_run(&b);
 
     benchmark_print_summary(&b, &d);
 

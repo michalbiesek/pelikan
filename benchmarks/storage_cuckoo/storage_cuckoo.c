@@ -7,7 +7,7 @@ static cuckoo_metrics_st metrics = { CUCKOO_METRIC(METRIC_INIT) };
 static cuckoo_options_st options = { CUCKOO_OPTION(OPTION_INIT) };
 
 rstatus_i
-benchmark_init(size_t item_size, size_t nentries)
+bench_storage_init(size_t item_size, size_t nentries)
 {
     option_load_default((struct option *)&options, OPTION_CARDINALITY(options));
     options.cuckoo_policy.val.vuint = CUCKOO_POLICY_EXPIRE;
@@ -20,14 +20,14 @@ benchmark_init(size_t item_size, size_t nentries)
 }
 
 rstatus_i
-benchmark_deinit(void)
+bench_storage_deinit(void)
 {
     cuckoo_teardown();
     return CC_OK;
 }
 
 rstatus_i
-benchmark_put(struct benchmark_entry *e)
+bench_storage_put(struct benchmark_entry *e)
 {
     struct bstring key;
     struct val val;
@@ -41,7 +41,7 @@ benchmark_put(struct benchmark_entry *e)
 }
 
 rstatus_i
-benchmark_get(struct benchmark_entry *e)
+bench_storage_get(struct benchmark_entry *e)
 {
     struct bstring key;
     bstring_set_cstr(&key, e->key);
@@ -51,7 +51,7 @@ benchmark_get(struct benchmark_entry *e)
 }
 
 rstatus_i
-benchmark_rem(struct benchmark_entry *e)
+bench_storage_rem(struct benchmark_entry *e)
 {
     struct bstring key;
     bstring_set_cstr(&key, e->key);
