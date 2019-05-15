@@ -5,8 +5,7 @@
 #include <errno.h>
 #include <pthread.h>
 
-#include <storage/cuckoo/item.h>
-#include <storage/cuckoo/cuckoo.h>
+#include <bench_storage.h>
 #include <time/cc_timer.h>
 #include <cc_debug.h>
 #include <cc_mm.h>
@@ -32,16 +31,6 @@ static __thread unsigned int rseed = 1234; /* XXX: make this an option */
     ACTION(pct_rem,         OPTION_TYPE_UINT, 10,    "% of removes")
 
 #define O(b, opt) option_uint(&(b->options.benchmark.opt))
-
-typedef size_t benchmark_key_u;
-
-struct benchmark_entry {
-    char *key;
-    benchmark_key_u key_size;
-
-    char *value;
-    size_t value_size;
-};
 
 struct benchmark_specific {
     BENCHMARK_OPTION(OPTION_DECLARE)
@@ -142,80 +131,20 @@ benchmark_entries_delete(struct benchmark *b)
     cc_free(b->entries);
 }
 
-static int
-benchmark_cuckoo_init(struct benchmark *b)
-{
-    cuckoo_options_st options = { CUCKOO_OPTION(OPTION_INIT) };
-    static cuckoo_metrics_st metrics = { CUCKOO_METRIC(METRIC_INIT) };
-    options.cuckoo_policy.val.vuint = CUCKOO_POLICY_EXPIRE;
-    options.cuckoo_item_size.val.vuint = O(b, entry_max_size) + ITEM_OVERHEAD;
-    options.cuckoo_nitem.val.vuint = O(b, nentries);
+typedef struct {
+    rstatus_i (*init)(size_t item_size, size_t nentries);
+    rstatus_i (*deinit)(void);
+    rstatus_i (*put)(struct benchmark_entry *e);
+    rstatus_i (*get)(struct benchmark_entry *e);
+    rstatus_i (*rem)(struct benchmark_entry *e);
+} bench_engine_ops;
 
-    cuckoo_setup(&options, &metrics);
-
-    return 0;
-}
-
-static rstatus_i
-benchmark_cuckoo_deinit(struct benchmark *b)
-{
-    cuckoo_teardown();
-    return CC_OK;
-}
-
-static rstatus_i
-benchmark_cuckoo_put(struct benchmark *b, struct benchmark_entry *e)
-{
-    struct bstring key;
-    struct val val;
-    val.type = VAL_TYPE_STR;
-    bstring_set_cstr(&val.vstr, e->value);
-    bstring_set_cstr(&key, e->key);
-
-    struct item *it = cuckoo_insert(&key, &val, INT32_MAX);
-
-    return it != NULL ? CC_OK : CC_ENOMEM;
-}
-
-static rstatus_i
-benchmark_cuckoo_get(struct benchmark *b, struct benchmark_entry *e)
-{
-    struct bstring key;
-    bstring_set_cstr(&key, e->key);
-    struct item *it = cuckoo_get(&key);
-
-    return it != NULL ? CC_OK : CC_EEMPTY;
-}
-
-static rstatus_i
-benchmark_cuckoo_rem(struct benchmark *b, struct benchmark_entry *e)
-{
-    struct bstring key;
-    bstring_set_cstr(&key, e->key);
-
-    return cuckoo_delete(&key) ? CC_OK : CC_EEMPTY;
-}
-
-enum benchmark_storage_engines {
-    BENCHMARK_CUCKOO,
-
-    MAX_BENCHMARK_STORAGE_ENGINES
-};
-
-static struct bench_engine_ops {
-    rstatus_i (*init)(struct benchmark *b);
-    rstatus_i (*deinit)(struct benchmark *b);
-    rstatus_i (*put)(struct benchmark *b, struct benchmark_entry *e);
-    rstatus_i (*get)(struct benchmark *b, struct benchmark_entry *e);
-    rstatus_i (*rem)(struct benchmark *b, struct benchmark_entry *e);
-} bench_engines[MAX_BENCHMARK_STORAGE_ENGINES] = {
-    [BENCHMARK_CUCKOO] = {
-        .init = benchmark_cuckoo_init,
-        .deinit = benchmark_cuckoo_deinit,
-        .put = benchmark_cuckoo_put,
-        .get = benchmark_cuckoo_get,
-        .rem = benchmark_cuckoo_rem,
-    }
+static bench_engine_ops storage_ops = {
+        .init = benchmark_init,
+        .deinit = benchmark_deinit,
+        .put = benchmark_put,
+        .get = benchmark_get,
+        .rem = benchmark_rem,
 };
 
 static void
@@ -226,16 +155,16 @@ benchmark_print_summary(struct benchmark *b, struct duration *d)
 }
 
 static struct duration
-benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
+benchmark_run(struct benchmark *b, bench_engine_ops *ops)
 {
-    ops->init(b);
-
     struct array *in;
     struct array *in2;
 
     struct array *out;
 
     size_t nentries = O(b, nentries);
+
+    ops->init(O(b, entry_max_size),nentries);
 
     array_create(&in, nentries, sizeof(struct benchmark_entry *));
     array_create(&in2, nentries, sizeof(struct benchmark_entry *));
@@ -245,7 +174,7 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
         struct benchmark_entry **e = array_push(in);
         *e = &b->entries[i];
 
-        ASSERT(ops->put(b, *e) == CC_OK);
+        ASSERT(ops->put(*e) == CC_OK);
     }
 
     struct duration d;
@@ -257,14 +186,14 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
             /* XXX: array_shuffle(in) */
         }
 
-        unsigned pct = RRAND(0, 100);
+        unsigned pct = RRAND(0, 10000);
 
         unsigned pct_sum = 0;
         if (pct_sum <= pct && pct < O(b, pct_get) + pct_sum) {
             ASSERT(array_nelem(in) != 0);
             struct benchmark_entry **e = array_pop(in);
 
-            if (ops->get(b, *e) != CC_OK) {
+            if (ops->get(*e) != CC_OK) {
                 log_info("benchmark get() failed");
             }
 
@@ -279,12 +208,12 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
             } else {
                 ASSERT(array_nelem(in) != 0);
                 e = array_pop(in);
-                if (ops->rem(b, *e) != CC_OK) {
+                if (ops->rem(*e) != CC_OK) {
                     log_info("benchmark rem() failed");
                 }
             }
 
-            if (ops->put(b, *e) != CC_OK) {
+            if (ops->put(*e) != CC_OK) {
                 log_info("benchmark put() failed");
             }
 
@@ -296,7 +225,7 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
             ASSERT(array_nelem(in) != 0);
             struct benchmark_entry **e = array_pop(in);
 
-            if (ops->rem(b, *e) != CC_OK) {
+            if (ops->rem(*e) != CC_OK) {
                 log_info("benchmark rem() failed");
             }
 
@@ -307,7 +236,7 @@ benchmark_run(struct benchmark *b, struct bench_engine_ops *ops)
 
     duration_stop(&d);
 
-    ops->deinit(b);
+    ops->deinit();
 
     return d;
 }
@@ -323,7 +252,7 @@ main(int argc, char *argv[])
 
     benchmark_entries_populate(&b);
 
-    struct duration d = benchmark_run(&b, &bench_engines[BENCHMARK_CUCKOO]);
+    struct duration d = benchmark_run(&b, &storage_ops);
 
     benchmark_print_summary(&b, &d);
 
