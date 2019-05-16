@@ -60,7 +60,7 @@ _item_alloc(struct item **it_p, uint8_t klen, uint32_t vlen, uint8_t olen)
     uint8_t id = slab_id(item_ntotal(klen, vlen, olen));
     struct item *it;
 
-    log_verb("allocate item with klen %u vlen %u", klen, vlen);
+    loga("allocate item with klen %u vlen %u", klen, vlen);
 
     *it_p = NULL;
     if (id == SLABCLASS_INVALID_ID) {
@@ -76,7 +76,7 @@ _item_alloc(struct item **it_p, uint8_t klen, uint32_t vlen, uint8_t olen)
         INCR(slab_metrics, item_alloc);
         PERSLAB_INCR(id, item_curr);
 
-        log_verb("alloc it %p of id %"PRIu8" at offset %"PRIu32, it, it->id,
+        loga("alloc it %p of id %"PRIu8" at offset %"PRIu32, it, it->id,
                 it->offset);
 
         return ITEM_OK;
@@ -108,14 +108,15 @@ static void
 _item_link(struct item *it, bool relink)
 {
     ASSERT(it->magic == ITEM_MAGIC);
-    ASSERT(!(it->in_freeq));
 
     if (!relink) {
+        ASSERT(!(it->in_freeq));
         ASSERT(!(it->is_linked));
 
         it->is_linked = 1;
-        slab_deref(item_to_slab(it)); /* slab ref'ed in _item_alloc */
     }
+    slab_deref(item_to_slab(it)); /* slab ref'ed in _item_alloc */
+
 
     log_verb("link it %p of id %"PRIu8" at offset %"PRIu32, it, it->id,
             it->offset);
@@ -142,9 +143,12 @@ item_insert(struct item *it, const struct bstring *key)
 {
     ASSERT(it != NULL && key != NULL);
 
+    loga("item adress before %p", it);
     item_delete(key);
-
+    loga("item adress after %p", it);
+    loga("item_insert before is linked %d is free_q %d ",it->is_linked,it->in_freeq);
     _item_link(it, false);
+    loga("item_insert after is linked %d is free_q %d ",it->is_linked,it->in_freeq);
     log_verb("insert it %p of id %"PRIu8" for key %.*s", it, it->id, key->len,
         key->data);
 }
@@ -360,7 +364,7 @@ item_update(struct item *it, const struct bstring *val)
 static void
 _item_delete(struct item **it)
 {
-    log_verb("delete it %p of id %"PRIu8, *it, (*it)->id);
+    loga("delete it %p of id %"PRIu8, *it, (*it)->id);
 
     _item_unlink(*it);
     _item_dealloc(it);
@@ -372,6 +376,7 @@ item_delete(const struct bstring *key)
     struct item *it;
 
     it = item_get(key);
+    loga("item_delete after item_get adress %p", it);
     if (it != NULL) {
         _item_delete(&it);
 
