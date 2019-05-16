@@ -29,6 +29,7 @@ _get_req_type(struct request *req, struct bstring *type)
     switch (type->len) {
     case 4:
         if (str4cmp(type->data, 'q', 'u', 'i', 't')) {
+            exit(EXIT_SUCCESS);
             req->type = REQ_QUIT;
             break;
         }
