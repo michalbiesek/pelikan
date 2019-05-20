@@ -144,6 +144,7 @@ if (USE_PMEM)
         find_package(LIBPMEM REQUIRED 1.0)
     endif()
     link_directories(${LIBPMEM_LIBRARY_DIRS})
+    add_definitions(-DUSE_PMEM_VARIANT)
 endif(USE_PMEM)
 
 find_package(Threads)

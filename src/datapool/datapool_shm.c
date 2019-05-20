@@ -41,3 +41,12 @@ datapool_size(struct datapool *pool)
     return cc_alloc_usable_size(pool);
 }
 
+bool datapool_set_user_data(struct datapool *pool, void * user_data, size_t user_size)
+{
+    return true;
+}
+void* datapool_get_user_data(struct datapool *pool, size_t user_size)
+{
+    return NULL;
+}
+

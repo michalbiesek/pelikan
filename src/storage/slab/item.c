@@ -140,6 +140,27 @@ item_insert(struct item *it, const struct bstring *key)
         key->data);
 }
 
+void
+item_relink(struct item *it)
+{
+    ASSERT(it->magic == ITEM_MAGIC);
+    ASSERT(!(it->in_freeq));
+
+    log_verb("link it %p of id %"PRIu8" at offset %"PRIu32, it, it->id,
+            it->offset);
+
+    hashtable_put(it, hash_table);
+
+    INCR(slab_metrics, item_linked_curr);
+    INCR(slab_metrics, item_link);
+    /* TODO(yao): how do we track optional storage? Separate or treat as val? */
+    INCR_N(slab_metrics, item_keyval_byte, it->klen + it->vlen);
+    INCR_N(slab_metrics, item_val_byte, it->vlen);
+    PERSLAB_INCR_N(it->id, item_keyval_byte, it->klen + it->vlen);
+    PERSLAB_INCR_N(it->id, item_val_byte, it->vlen);
+}
+
+
 /*
  * Unlinks an item from the hash table.
  */
