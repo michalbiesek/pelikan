@@ -20,7 +20,9 @@
  * Big enough to fit all necessary metadata, but most of this size is left
  * unused for future expansion.
  */
-#define DATAPOOL_HEADER_LEN 4096
+#define DATAPOOL_USER_HEADER_LEN     2048
+#define DATAPOOL_INTERNAL_HEADER_LEN 2048
+#define DATAPOOL_HEADER_LEN (DATAPOOL_USER_HEADER_LEN + DATAPOOL_INTERNAL_HEADER_LEN)
 #define DATAPOOL_VERSION 1
 
 #define DATAPOOL_FLAG_DIRTY (1 << 0)
@@ -35,18 +37,26 @@ struct datapool_header {
     uint64_t version;
     uint64_t size;
     uint64_t flags;
-    uint8_t unused[DATAPOOL_HEADER_LEN - 32];
+    uint8_t unused[DATAPOOL_INTERNAL_HEADER_LEN - 32];
+};
+
+struct datapool_user_header {
+    uint8_t space[DATAPOOL_USER_HEADER_LEN];
 };
 
 struct datapool {
     void *addr;
 
     struct datapool_header *hdr;
+    struct datapool_user_header *user_header;
     void *user_addr;
     size_t mapped_len;
     int is_pmem;
     int file_backed;
+    int is_fresh;
 };
+
+#define ADR_2_USER_SPACE(x) ((x) + sizeof(struct datapool_header)+ sizeof(struct datapool_user_header))
 
 static void
 datapool_sync_hdr(struct datapool *pool)
@@ -108,6 +118,9 @@ datapool_initialize(struct datapool *pool)
 
     /* 1. clear the header from any leftovers */
     memset(pool->hdr, 0, DATAPOOL_HEADER_LEN);
+    pool->user_header = pool->addr;
+    memcpy(pool->user_header, pool->addr, sizeof (void*));
+
     datapool_sync_hdr(pool);
 
     /* 2. fill in the data */
@@ -135,6 +148,12 @@ datapool_flag_clear(struct datapool *pool, int flag)
     datapool_sync_hdr(pool);
 }
 
+static void
+datapool_set_fresh_pool_state(struct datapool *pool, int state)
+{
+    pool->is_fresh = state;
+}
+
 /*
  * Opens, and if necessary initializes, a datapool that resides in the given
  * file. If no file is provided, the pool is allocated through cc_zalloc.
@@ -143,7 +162,7 @@ datapool_flag_clear(struct datapool *pool, int flag)
  * finish successfully.
  */
 struct datapool *
-datapool_open(const char *path, size_t size, int *fresh)
+datapool_open(const char *path, size_t size)
 {
     struct datapool *pool = cc_alloc(sizeof(*pool));
     if (pool == NULL) {
@@ -151,7 +170,7 @@ datapool_open(const char *path, size_t size, int *fresh)
         goto err_alloc;
     }
 
-    size_t map_size = size + sizeof(struct datapool_header);
+    size_t map_size = ADR_2_USER_SPACE(size);
 
     if (path == NULL) { /* fallback to DRAM if pmem is not configured */
         pool->addr = cc_zalloc(map_size);
@@ -173,16 +192,12 @@ datapool_open(const char *path, size_t size, int *fresh)
         path, pool->mapped_len, pool->is_pmem);
 
     pool->hdr = pool->addr;
-    pool->user_addr = (uint8_t *)pool->addr + sizeof(struct datapool_header);
+    pool->user_addr = ADR_2_USER_SPACE((uint8_t *)pool->addr);
 
-    if (fresh) {
-        *fresh = 0;
-    }
+    datapool_set_fresh_pool_state(pool, 0);
 
     if (!datapool_valid(pool)) {
-        if (fresh) {
-            *fresh = 1;
-        }
+        datapool_set_fresh_pool_state(pool, 1);
 
         datapool_initialize(pool);
     }
@@ -225,3 +240,14 @@ datapool_size(struct datapool *pool)
     return pool->mapped_len - sizeof(struct datapool_header);
 }
 
+int
+datapool_get_fresh_state(struct datapool *pool)
+{
+    return pool->is_fresh;
+}
+
+ptrdiff_t datapool_get_offset(struct datapool *pool)
+{
+    ptrdiff_t test = (ptrdiff_t)pool->addr-(ptrdiff_t)pool->user_header;
+    return test;
+}

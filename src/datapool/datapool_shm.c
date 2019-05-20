@@ -7,17 +7,19 @@
 #include <cc_debug.h>
 #include <cc_mm.h>
 
+
+int datapool_get_fresh_state(struct datapool *pool)
+{
+    return 1;
+}
+
 struct datapool *
-datapool_open(const char *path, size_t size, int *fresh)
+datapool_open(const char *path, size_t size)
 {
     if (path != NULL) {
         log_warn("attempted to open a file-based data pool without"
             "pmem features enabled");
         return NULL;
-    }
-
-    if (fresh) {
-        *fresh = 1;
     }
 
     return cc_zalloc(size);
@@ -41,3 +43,7 @@ datapool_size(struct datapool *pool)
     return cc_alloc_usable_size(pool);
 }
 
+ptrdiff_t datapool_get_offset(struct datapool *pool)
+{
+    return 0;
+}
