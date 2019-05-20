@@ -1,5 +1,5 @@
 #include "slab.h"
-
+#include <datapool/datapool.h>
 #include "hashtable.h"
 #include "item.h"
 
@@ -24,7 +24,7 @@ struct slab_heapinfo {
     struct slab     **slab_table;/* table of all slabs */
     struct slab_tqh slab_lruq;   /* lru slab q */
 };
-
+static struct datapool *pool_slab;              /* data pool mapping for the slabs */
 perslab_metrics_st perslab[SLABCLASS_MAX_ID];
 uint8_t profile_last_id; /* last id in slab profile */
 
@@ -41,7 +41,7 @@ static size_t item_min = ITEM_SIZE_MIN; /* min item size */
 static size_t item_max = ITEM_SIZE_MAX; /* max item size */
 static double item_growth = ITEM_FACTOR;/* item size growth factor */
 static uint32_t hash_power = HASH_POWER;/* power (of 2) entries for hashtable */
-
+static char *slab_datapool = SLAB_DATAPOOL;   /* slab_datapool */
 bool use_cas = SLAB_USE_CAS;
 struct hash_table *hash_table = NULL;
 uint64_t cas_id;
@@ -87,6 +87,55 @@ _slab_to_item(struct slab *slab, uint32_t idx, size_t size)
     return it;
 }
 
+static void
+_slab_restore_item_to_freeq(struct item *it, uint8_t id)
+{
+    struct slabclass *p = &slabclass[id];
+
+    ASSERT(id >= SLABCLASS_MIN_ID && id <= profile_last_id);
+    ASSERT(item_to_slab(it)->id == id);
+    ASSERT(!(it->is_linked));
+    ASSERT(it->offset != 0);
+
+    log_verb("put free q it %p at offset %"PRIu32" with id %"PRIu8, it,
+            it->offset, it->id);
+
+    it->in_freeq = 1;
+
+    p->nfree_itemq++;
+    SLIST_INSERT_HEAD(&p->free_itemq, it, i_sle);
+
+    PERSLAB_INCR(id, item_free);
+}
+static void _slab_lruq_append(struct slab *slab);
+
+static void
+_slab_iterate_over_all_items(struct slab *slab)
+{
+    struct slabclass *p;
+    struct item *it;
+    uint32_t i;
+
+    p = &slabclass[slab->id];
+
+    for (i = 0; i < p->nitem; i++) {
+        it = _slab_to_item(slab, i, p->size);
+        if (it->is_linked) {
+            INCR(slab_metrics, item_curr);
+            INCR(slab_metrics, item_alloc);
+            PERSLAB_INCR(slab->id, item_curr);
+            item_relink(it);
+        }
+        else if(it->in_freeq) {
+            _slab_restore_item_to_freeq(it,slab->id);
+        }
+    }
+
+    /* make this slab as the current slab */
+    p->nfree_item = p->nitem;
+    p->next_item_in_slab = (struct item *)&slab->data[0];
+}
+
 /*
  * Return the id of the slab which can store an item of a given size.
  *
@@ -123,6 +172,40 @@ slab_id(size_t size)
     log_vverb("slab_id: returning %u", id);
 
     return id;
+}
+
+static void
+_slab_table_update(struct slab *slab)
+{
+    ASSERT(heapinfo.nslab < heapinfo.max_nslab);
+
+    heapinfo.slab_table[heapinfo.nslab] = slab;
+    heapinfo.nslab++;
+
+    log_verb("new slab %p allocated at pos %u", slab,
+              heapinfo.nslab - 1);
+}
+
+static void
+_slab_recreate (void)
+{
+    uint32_t i;
+    uint8_t * heap_calculate = datapool_addr(pool_slab);
+    ptrdiff_t offset = datapool_get_offset(pool_slab);
+    for(i = 0; i < heapinfo.max_nslab; i++) {
+        struct slab *slab_iterator = ( struct slab *) heap_calculate;
+        if (slab_iterator->magic == SLAB_MAGIC) {
+            INCR(slab_metrics, slab_req);
+            _slab_table_update(slab_iterator);
+            INCR(slab_metrics, slab_curr);
+            PERSLAB_INCR(slab_iterator->id, slab_curr);
+            INCR_N(slab_metrics, slab_memory, slab_size);
+            slab_iterator->s_tqe.tqe_next = slab_iterator->s_tqe.tqe_next - offset;
+            slab_iterator->s_tqe.tqe_prev = slab_iterator->s_tqe.tqe_prev - offset;
+            _slab_iterate_over_all_items(slab_iterator);
+        }
+        heap_calculate += slab_size;
+    }
 }
 
 /*
@@ -169,6 +252,10 @@ _slab_slabclass_setup(void)
         p->next_item_in_slab = NULL;
     }
 
+    if (!datapool_get_fresh_state(pool_slab)) {
+        _slab_recreate();
+    }
+
     return CC_OK;
 }
 
@@ -193,7 +280,12 @@ _slab_heapinfo_setup(void)
 
     heapinfo.base = NULL;
     if (prealloc) {
-        heapinfo.base = cc_alloc(heapinfo.max_nslab * slab_size);
+        pool_slab = datapool_open(slab_datapool, heapinfo.max_nslab * slab_size);
+        if (pool_slab == NULL) {
+            log_crit("Could not create pool_slab");
+            exit(EX_CONFIG);
+        }
+        heapinfo.base = datapool_addr(pool_slab);
         if (heapinfo.base == NULL) {
             log_error("pre-alloc %zu bytes for %"PRIu32" slabs failed: %s",
                       heapinfo.max_nslab * slab_size, heapinfo.max_nslab,
@@ -204,6 +296,10 @@ _slab_heapinfo_setup(void)
         log_info("pre-allocated %zu bytes for %"PRIu32" slabs",
                   slab_mem, heapinfo.max_nslab);
     }
+    else if (slab_datapool) {
+        log_error("PMEM is supported only for prealloc option");
+        return CC_EINVAL;
+    }
     heapinfo.curr = heapinfo.base;
 
     heapinfo.slab_table = cc_alloc(sizeof(*heapinfo.slab_table) * heapinfo.max_nslab);
@@ -213,7 +309,7 @@ _slab_heapinfo_setup(void)
         return CC_ENOMEM;
     }
     TAILQ_INIT(&heapinfo.slab_lruq);
-
+    log_crit("heapinfo slab lruq %p", &heapinfo.slab_lruq);
     log_vverb("created slab table with %"PRIu32" entries",
               heapinfo.max_nslab);
 
@@ -223,6 +319,8 @@ _slab_heapinfo_setup(void)
 static void
 _slab_heapinfo_teardown(void)
 {
+    datapool_close(pool_slab);
+    pool_slab = NULL;
 }
 
 static rstatus_i
@@ -425,6 +523,7 @@ slab_setup(slab_options_st *options, slab_metrics_st *metrics)
         max_ttl = option_uint(&options->slab_item_max_ttl);
         use_cas = option_bool(&options->slab_use_cas);
         hash_power = option_uint(&options->slab_hash_power);
+        slab_datapool = option_str(&options->slab_datapool);
     }
 
     hash_table = hashtable_create(hash_power);
@@ -462,9 +561,9 @@ _slab_hdr_init(struct slab *slab, uint8_t id)
 {
     ASSERT(id >= SLABCLASS_MIN_ID && id <= profile_last_id);
 
-#if defined CC_ASSERT_PANIC || defined CC_ASSERT_LOG
+//#if defined CC_ASSERT_PANIC || defined CC_ASSERT_LOG
     slab->magic = SLAB_MAGIC;
-#endif
+//#endif
     slab->id = id;
     slab->padding = 0;
     slab->refcount = 0;
@@ -491,18 +590,6 @@ _slab_heap_create(void)
     return slab;
 }
 
-static void
-_slab_table_update(struct slab *slab)
-{
-    ASSERT(heapinfo.nslab < heapinfo.max_nslab);
-
-    heapinfo.slab_table[heapinfo.nslab] = slab;
-    heapinfo.nslab++;
-
-    log_verb("new slab %p allocated at pos %u", slab,
-              heapinfo.nslab - 1);
-}
-
 static struct slab *
 _slab_table_rand(void)
 {
@@ -521,14 +608,15 @@ _slab_lruq_head(void)
 static void
 _slab_lruq_append(struct slab *slab)
 {
-    log_vverb("append slab %p with id %d from lruq", slab, slab->id);
+    log_crit("append slab %p with id %d from lruq", slab, slab->id);
     TAILQ_INSERT_TAIL(&heapinfo.slab_lruq, slab, s_tqe);
+    log_crit("LRUQ slab next %p slab previous %p", slab->s_tqe.tqe_next, slab->s_tqe.tqe_prev);
 }
 
 static void
 _slab_lruq_remove(struct slab *slab)
 {
-    log_vverb("remove slab %p with id %d from lruq", slab, slab->id);
+    log_crit("remove slab %p with id %d from lruq", slab, slab->id);
     TAILQ_REMOVE(&heapinfo.slab_lruq, slab, s_tqe);
 }
 

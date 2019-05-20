@@ -212,3 +212,6 @@ bool item_delete(const struct bstring *key);
 
 /* flush the cache */
 void item_flush(void);
+
+/* Relink item after reset */
+void item_relink(struct item *it);
