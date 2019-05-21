@@ -770,6 +770,7 @@ main(void)
     Suite *suite = slab_suite();
     SRunner *srunner = srunner_create(suite);
     srunner_set_log(srunner, DEBUG_LOG);
+//    srunner_set_fork_status(srunner, CK_NOFORK);
     srunner_run_all(srunner, CK_ENV); /* set CK_VEBOSITY in ENV to customize */
     nfail = srunner_ntests_failed(srunner);
     srunner_free(srunner);

@@ -41,7 +41,9 @@ struct datapool_header {
 };
 
 struct datapool_user_header {
-    uint8_t space[DATAPOOL_USER_HEADER_LEN];
+    uint64_t tqh_first;
+    uint64_t offset;
+    uint8_t space[DATAPOOL_USER_HEADER_LEN-16];
 };
 
 struct datapool {
@@ -118,7 +120,8 @@ datapool_initialize(struct datapool *pool)
     memset(pool->hdr, 0, DATAPOOL_HEADER_LEN);
     memset(pool->user_header, 0, DATAPOOL_HEADER_LEN);
 
-    memcpy(pool->user_header, &pool->addr, sizeof (void*));
+//    memcpy(pool->user_header, &pool->addr, sizeof (void*));
+    pool->user_header->offset = (size_t)pool->addr;
 
     datapool_sync_hdr(pool);
 
@@ -151,6 +154,18 @@ static void
 datapool_fresh_state_set(struct datapool *pool, int state)
 {
     pool->is_fresh = state;
+}
+
+void
+datapool_save_tqh_first(struct datapool *pool, void* data)
+{
+    pool->user_header->tqh_first = (size_t)data;
+}
+
+uint64_t
+datapool_get_tqh_first(struct datapool *pool)
+{
+    return pool->user_header->tqh_first;
 }
 
 /*
@@ -248,8 +263,11 @@ datapool_get_fresh_state(struct datapool *pool)
 
 ptrdiff_t datapool_get_offset(struct datapool *pool)
 {
-    ptrdiff_t val_temp;
-    memcpy(&val_temp, pool->user_header, sizeof (void*));
+//    ptrdiff_t val_temp;
+//    memcpy(&val_temp, pool->user_header, sizeof (void*));
+    ptrdiff_t val_temp = pool->user_header->offset;
     ptrdiff_t test = (ptrdiff_t)pool->addr - val_temp;
     return test;
 }
+
+

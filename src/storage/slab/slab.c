@@ -200,12 +200,14 @@ _slab_recreate (void)
             INCR(slab_metrics, slab_curr);
             PERSLAB_INCR(slab_iterator->id, slab_curr);
             INCR_N(slab_metrics, slab_memory, slab_size);
-            slab_iterator->s_tqe.tqe_next = slab_iterator->s_tqe.tqe_next - offset;
-            slab_iterator->s_tqe.tqe_prev = slab_iterator->s_tqe.tqe_prev - offset;
+            slab_iterator->s_tqe.tqe_next -= offset;
+            slab_iterator->s_tqe.tqe_prev -= offset;
             _slab_iterate_over_all_items(slab_iterator);
         }
         heap_calculate += slab_size;
     }
+    size_t value = datapool_get_tqh_first(pool_slab);
+    heapinfo.slab_lruq.tqh_first = (struct slab*)value;
 }
 
 /*
@@ -319,6 +321,7 @@ _slab_heapinfo_setup(void)
 static void
 _slab_heapinfo_teardown(void)
 {
+    datapool_save_tqh_first(pool_slab,heapinfo.slab_lruq.tqh_first);
     datapool_close(pool_slab);
     pool_slab = NULL;
 }
