@@ -69,7 +69,7 @@ enum {
 
 /*          name          type                default       description */
 #define TIME_OPTION(ACTION) \
-    ACTION( time_type,    OPTION_TYPE_UINT,   TIME_MEMCACHE,    "Expiry timestamp mode" )
+    ACTION( time_type,    OPTION_TYPE_UINT,   TIME_UNIX,    "Expiry timestamp mode" )
 
 typedef struct {
     TIME_OPTION(OPTION_DECLARE)
