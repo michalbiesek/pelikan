@@ -24,11 +24,11 @@ static __thread unsigned int rseed = 1234; /* XXX: make this an option */
 #define BENCHMARK_OPTION(ACTION)\
     ACTION(entry_min_size,  OPTION_TYPE_UINT, 64,    "Min size of cache entry")\
     ACTION(entry_max_size,  OPTION_TYPE_UINT, 64,    "Max size of cache entry")\
-    ACTION(nentries,        OPTION_TYPE_UINT, 10000,  "Max total number of cache entries" )\
-    ACTION(nops,            OPTION_TYPE_UINT, 10000000,"Total number of operations")\
-    ACTION(pct_get,         OPTION_TYPE_UINT, 0,    "% of gets")\
-    ACTION(pct_put,         OPTION_TYPE_UINT, 100,  "% of puts")\
-    ACTION(pct_rem,         OPTION_TYPE_UINT, 0,    "% of removes")
+    ACTION(nentries,        OPTION_TYPE_UINT, 100000,  "Max total number of cache entries" )\
+    ACTION(nops,            OPTION_TYPE_UINT, 100000000,"Total number of operations")\
+    ACTION(pct_get,         OPTION_TYPE_UINT, 10,    "% of gets")\
+    ACTION(pct_put,         OPTION_TYPE_UINT, 80,  "% of puts")\
+    ACTION(pct_rem,         OPTION_TYPE_UINT, 10,    "% of removes")
 
 #define O(b, opt) option_uint(&(b->options.benchmark.opt))
 
