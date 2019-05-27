@@ -17,7 +17,7 @@
 #define CUCKOO_NITEM 1024
 #define CUCKOO_POLICY CUCKOO_POLICY_RANDOM
 #define CUCKOO_MAX_TTL (30 * 24 * 60 * 60) /* 30 days */
-#define CUCKOO_DATAPOOL "/mnt/pmem12/cuckoo_datapool"
+#define CUCKOO_DATAPOOL NULL
 
 /*          name                type                default             description */
 #define CUCKOO_OPTION(ACTION)                                                                    \
