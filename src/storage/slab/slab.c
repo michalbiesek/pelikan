@@ -25,6 +25,11 @@ struct slab_heapinfo {
     struct slab_tqh slab_lruq;   /* lru slab q */
 };
 
+struct pool_metadata {
+    ptrdiff_t usr_pool_addr;                 /* saved pool adresss */
+    struct slab* slab_lruq_head_saved;       /* lru slab q head*/
+};
+
 static struct datapool *pool_slab;              /* data pool mapping for the slabs */
 static int pool_slab_state;                     /* data pool state */
 perslab_metrics_st perslab[SLABCLASS_MAX_ID];
@@ -198,7 +203,9 @@ _slab_recovery(void)
 {
     uint32_t i;
     uint8_t * heap_start = datapool_addr(pool_slab);
-    /* TODO: recreate heapinfo.slab_lruq */
+    struct pool_metadata *temp_data;
+    datapool_get_user_data(pool_slab, &temp_data ,sizeof (struct pool_metadata));
+    TAILQ_FIRST(&heapinfo.slab_lruq) = temp_data->slab_lruq_head_saved;
     for(i = 0; i < heapinfo.max_nslab; i++) {
         struct slab *slab = (struct slab *) heap_start;
         if (slab->initialized) {
@@ -323,6 +330,12 @@ _slab_heapinfo_setup(void)
 static void
 _slab_heapinfo_teardown(void)
 {
+    struct pool_metadata temp_metadata =
+    {
+        (ptrdiff_t)(uint8_t *)datapool_addr(pool_slab),
+        TAILQ_FIRST(&heapinfo.slab_lruq)
+    };
+    datapool_set_user_data(pool_slab, &temp_metadata, sizeof (struct pool_metadata));
     datapool_close(pool_slab);
     pool_slab = NULL;
 }
