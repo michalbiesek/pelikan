@@ -144,6 +144,9 @@ find_package(PkgConfig QUIET)
 
 if(PKG_CONFIG_FOUND)
     pkg_check_modules(CHECK QUIET check>=0.10)
+    if(CHECK_FOUND)
+        set(CHECK_LIBRARIES ${pkgcfg_lib_CHECK_check})
+    endif()
 endif()
 
 if(NOT CHECK_FOUND)
