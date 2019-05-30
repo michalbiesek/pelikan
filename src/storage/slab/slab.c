@@ -25,6 +25,11 @@ struct slab_heapinfo {
     struct slab_tqh slab_lruq;   /* lru slab q */
 };
 
+struct pool_metadata {
+    ptrdiff_t usr_pool_addr;                 /* saved pool adresss */
+    struct slab* slab_lruq_head_saved;       /* lru slab q head*/
+};
+
 static struct datapool *pool_slab;              /* data pool mapping for the slabs */
 static int pool_slab_state;                     /* data pool state */
 perslab_metrics_st perslab[SLABCLASS_MAX_ID];
@@ -197,18 +202,45 @@ _slab_recovery(void)
 {
     uint32_t i;
     uint8_t * heap_start = datapool_addr(pool_slab);
-    /* TODO: recreate heapinfo.slab_lruq */
+    ptrdiff_t heap_start_ptr = (ptrdiff_t) heap_start;
+    struct pool_metadata temp_data;
+    datapool_get_user_data(pool_slab, &temp_data ,sizeof (struct pool_metadata));
+    ptrdiff_t previous_heap = temp_data.usr_pool_addr;
+    struct slab* test_slab = (uint8_t *)temp_data.slab_lruq_head_saved;
+    ptrdiff_t offset = heap_start_ptr - previous_heap;
+    TAILQ_FIRST(&heapinfo.slab_lruq) = (uint8_t *)temp_data.slab_lruq_head_saved;
+    loga("_slab_recovery slab_lruq %p ", TAILQ_FIRST(&heapinfo.slab_lruq));
+    loga("_slab_recovery slab_user_space %p ", heap_start);
+    loga("_slab_recovery previous user_space %p ", previous_heap);
+    loga("_slab_recovery offset is equal %td ", offset);
+    TAILQ_FIRST(&heapinfo.slab_lruq) = (uint8_t *)temp_data.slab_lruq_head_saved+offset;
+    TAILQ_MY_LAST(&heapinfo.slab_lruq) = NULL;
+    loga("_slab_recovery slab_lruq after offset %p ", TAILQ_FIRST(&heapinfo.slab_lruq));
     for(i = 0; i < heapinfo.max_nslab; i++) {
         struct slab *slab = (struct slab *) heap_start;
         if (slab->initialized) {
+            loga("slab->initialized slab %p with id %d from lruq %p tqe_prev %p tqe_next %p", slab, slab->id, slab->s_tqe.tqe_prev, slab->s_tqe.tqe_next);
             INCR(slab_metrics, slab_req);
             _slab_table_update(slab);
             INCR(slab_metrics, slab_curr);
             PERSLAB_INCR(slab->id, slab_curr);
             INCR_N(slab_metrics, slab_memory, slab_size);
+            if (slab->s_tqe.tqe_next)
+            {
+                slab->s_tqe.tqe_next = (uint8_t *) slab->s_tqe.tqe_next + offset;
+            }
+            if (slab->s_tqe.tqe_prev)
+            {
+                slab->s_tqe.tqe_prev = (uint8_t *) slab->s_tqe.tqe_prev + offset;
+            }
             _slab_recreate_items(slab);
         }
         heap_start += slab_size;
+    }
+    struct slab* tslab;
+    struct slab* slab;
+    TAILQ_FOREACH_SAFE(slab ,&heapinfo.slab_lruq, s_tqe, tslab){
+        loga("FOREACH SAFE slab %p, slab id %d", slab, slab->id);
     }
 }
 
@@ -311,6 +343,7 @@ _slab_heapinfo_setup(void)
                   heapinfo.max_nslab, strerror(errno));
         return CC_ENOMEM;
     }
+
     TAILQ_INIT(&heapinfo.slab_lruq);
 
     log_vverb("created slab table with %"PRIu32" entries",
@@ -322,6 +355,19 @@ _slab_heapinfo_setup(void)
 static void
 _slab_heapinfo_teardown(void)
 {
+    struct pool_metadata temp_metadata =
+    {
+        (ptrdiff_t)(uint8_t *)datapool_addr(pool_slab),
+        TAILQ_FIRST(&heapinfo.slab_lruq)
+    };
+    loga("_slab_heapinfo_teardown usr_pool_addr %td slab_lruq %p ", (ptrdiff_t)(uint8_t *)datapool_addr(pool_slab),TAILQ_FIRST(&heapinfo.slab_lruq));
+    datapool_set_user_data(pool_slab, &temp_metadata, sizeof (struct pool_metadata));
+    struct slab* tslab;
+    struct slab* slab;
+    TAILQ_FOREACH_SAFE(slab ,&heapinfo.slab_lruq, s_tqe, tslab){
+        loga("FOREACH SAFE slab %p, slab id %d",slab,slab->id);
+    }
+
     datapool_close(pool_slab);
     pool_slab = NULL;
 }
@@ -612,8 +658,8 @@ _slab_lruq_head(void)
 static void
 _slab_lruq_append(struct slab *slab)
 {
-    log_vverb("append slab %p with id %d from lruq", slab, slab->id);
-    TAILQ_INSERT_TAIL(&heapinfo.slab_lruq, slab, s_tqe);
+   TAILQ_INSERT_TAIL(&heapinfo.slab_lruq, slab, s_tqe);
+   loga("appended slab %p with id %d from lruq %p tqe_prev %p tqe_next %p", slab, slab->id, slab->s_tqe.tqe_prev, slab->s_tqe.tqe_next);
 }
 
 static void

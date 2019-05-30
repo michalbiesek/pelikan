@@ -575,6 +575,8 @@ struct {                                                                \
 
 #define TAILQ_FIRST(head)    ((head)->tqh_first)
 
+#define TAILQ_MY_LAST(head)  ((head)->tqh_last)
+
 #define TAILQ_FOREACH(var, head, field)                                 \
     for ((var) = TAILQ_FIRST((head));                                   \
         (var);                                                          \
