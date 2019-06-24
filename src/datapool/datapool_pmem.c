@@ -12,6 +12,51 @@
 #include <libpmem.h>
 #include <errno.h>
 
+#define DATAPOOL_MODULE_NAME "datapool::pmem"
+
+static bool datapool_init = false;
+
+static char* datapool_path = DATAPOOL_PATH;
+static bool datapool_prefault = DATAPOOL_PREFAULT;
+
+
+datapool_medium_e
+datapool_get_medium(void)
+{
+    if (!datapool_path) {
+        return DATAPOOL_MEDIUM_SHM;
+    }
+    return DATAPOOL_MEDIUM_PMEM;
+}
+
+void
+datapool_setup(datapool_options_st *options)
+{
+    log_info("set up the %s module", DATAPOOL_MODULE_NAME);
+
+    if (datapool_init) {
+        log_warn("datapool has already been setup, re-creating");
+        datapool_teardown();
+    }
+
+    if (options != NULL) {
+        datapool_path = option_str(&options->datapool_path);
+        datapool_prefault = option_bool(&options->datapool_prefault);
+    }
+    datapool_init = true;
+}
+
+void
+datapool_teardown(void)
+{
+    log_info("tear down the %s module", DATAPOOL_MODULE_NAME);
+
+    if (!datapool_init) {
+        log_warn("%s has never been setup", DATAPOOL_MODULE_NAME);
+    }
+    datapool_init = false;
+}
+
 #define DATAPOOL_SIGNATURE ("PELIKAN") /* 8 bytes */
 #define DATAPOOL_SIGNATURE_LEN (sizeof(DATAPOOL_SIGNATURE))
 
@@ -153,7 +198,7 @@ datapool_flag_clear(struct datapool *pool, int flag)
  * finish successfully.
  */
 struct datapool *
-datapool_open(const char *path, size_t size, int *fresh, bool prefault)
+datapool_open(size_t size, int *fresh)
 {
     struct datapool *pool = cc_alloc(sizeof(*pool));
     if (pool == NULL) {
@@ -163,23 +208,23 @@ datapool_open(const char *path, size_t size, int *fresh, bool prefault)
 
     size_t map_size = size + sizeof(struct datapool_header);
 
-    if (path == NULL) { /* fallback to DRAM if pmem is not configured */
+    if (datapool_path == NULL) { /* fallback to DRAM if pmem is not configured */
         pool->addr = cc_zalloc(map_size);
         pool->mapped_len = map_size;
         pool->is_pmem = 0;
         pool->file_backed = 0;
     } else {
-        pool->addr = pmem_map_file(path, map_size, PMEM_FILE_CREATE, 0600,
+        pool->addr = pmem_map_file(datapool_path, map_size, PMEM_FILE_CREATE, 0600,
             &pool->mapped_len, &pool->is_pmem);
         pool->file_backed = 1;
     }
 
     if (pool->addr == NULL) {
-        log_error(path == NULL ? strerror(errno) : pmem_errormsg());
+        log_error(datapool_path == NULL ? strerror(errno) : pmem_errormsg());
         goto err_map;
     }
 
-    if (prefault) {
+    if (datapool_prefault) {
         log_info("prefault datapool");
         volatile char *cur_addr = pool->addr;
         char *addr_end = (char *)cur_addr + map_size;
@@ -189,7 +234,7 @@ datapool_open(const char *path, size_t size, int *fresh, bool prefault)
     }
 
     log_info("mapped datapool %s with size %llu, is_pmem: %d",
-        path, pool->mapped_len, pool->is_pmem);
+        datapool_path, pool->mapped_len, pool->is_pmem);
 
     pool->hdr = pool->addr;
     pool->user_addr = (uint8_t *)pool->addr + sizeof(struct datapool_header);

@@ -1,3 +1,4 @@
+#include <datapool/datapool.h>
 #include <storage/slab/item.h>
 #include <storage/slab/slab.h>
 
@@ -13,8 +14,9 @@
 /* define for each suite, local scope due to macro visibility rule */
 #define SUITE_NAME "slab"
 #define DEBUG_LOG  SUITE_NAME ".log"
-#define DATAPOOL_PATH "./slab_datapool.pelikan"
+#define SLAB_DATAPOOL_PATH "./slab_datapool.pelikan"
 
+datapool_options_st datapool_options = { DATAPOOL_OPTION(OPTION_INIT) };
 slab_options_st options = { SLAB_OPTION(OPTION_INIT) };
 slab_metrics_st metrics = { SLAB_METRIC(METRIC_INIT) };
 
@@ -27,7 +29,9 @@ static void
 test_setup(void)
 {
     option_load_default((struct option *)&options, OPTION_CARDINALITY(options));
-    options.slab_datapool.val.vstr = DATAPOOL_PATH;
+    option_load_default((struct option *)&datapool_options, OPTION_CARDINALITY(datapool_options));
+    datapool_options.datapool_path.val.vstr = SLAB_DATAPOOL_PATH;
+    datapool_setup(&datapool_options);
     slab_setup(&options, &metrics);
 }
 
@@ -35,8 +39,9 @@ static void
 test_teardown(int un)
 {
     slab_teardown();
+    datapool_teardown();
     if (un)
-        unlink(DATAPOOL_PATH);
+        unlink(SLAB_DATAPOOL_PATH);
 }
 
 static void

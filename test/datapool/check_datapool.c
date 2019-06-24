@@ -12,13 +12,32 @@
 #define TEST_DATAFILE "./datapool.pelikan"
 #define TEST_DATASIZE (1 << 20)
 
+datapool_options_st options = { DATAPOOL_OPTION(OPTION_INIT) };
+
+/*
+ * utilities
+ */
+static void
+test_setup(void)
+{
+    options.datapool_path.val.vstr = TEST_DATAFILE;
+    datapool_setup(&options);
+}
+
+static void
+test_teardown(void)
+{
+    datapool_teardown();
+    unlink(TEST_DATAFILE);
+}
+
 /*
  * tests
  */
 START_TEST(test_datapool)
 {
     int fresh = 0;
-    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATASIZE, &fresh, false);
+    struct datapool *pool = datapool_open(TEST_DATASIZE, &fresh);
     ck_assert_ptr_nonnull(pool);
     size_t s = datapool_size(pool);
     ck_assert_int_ge(s, TEST_DATASIZE);
@@ -26,7 +45,7 @@ START_TEST(test_datapool)
     ck_assert_ptr_nonnull(datapool_addr(pool));
     datapool_close(pool);
 
-    pool = datapool_open(TEST_DATAFILE, TEST_DATASIZE, &fresh, false);
+    pool = datapool_open(TEST_DATASIZE, &fresh);
     ck_assert_ptr_nonnull(pool);
     ck_assert_int_eq(s, datapool_size(pool));
     ck_assert_int_eq(fresh, 0);
@@ -36,8 +55,12 @@ END_TEST
 
 START_TEST(test_devzero)
 {
+    option_load_default((struct option *)&options, OPTION_CARDINALITY(options));
+
+    test_teardown();
+    datapool_setup(&options);
     int fresh = 0;
-    struct datapool *pool = datapool_open(NULL, TEST_DATASIZE, &fresh, false);
+    struct datapool *pool = datapool_open(TEST_DATASIZE, &fresh);
     ck_assert_ptr_nonnull(pool);
     size_t s = datapool_size(pool);
     ck_assert_int_ge(s, TEST_DATASIZE);
@@ -45,7 +68,7 @@ START_TEST(test_devzero)
     ck_assert_ptr_nonnull(datapool_addr(pool));
     datapool_close(pool);
 
-    pool = datapool_open(NULL, TEST_DATASIZE, &fresh, false);
+    pool = datapool_open(TEST_DATASIZE, &fresh);
     ck_assert_ptr_nonnull(pool);
     ck_assert_int_eq(s, datapool_size(pool));
     ck_assert_int_eq(fresh, 1);
@@ -75,15 +98,18 @@ main(void)
 {
     int nfail;
 
+    /* setup */
+    test_setup();
+
     Suite *suite = datapool_suite();
     SRunner *srunner = srunner_create(suite);
-    srunner_set_fork_status(srunner, CK_NOFORK);
     srunner_set_log(srunner, DEBUG_LOG);
     srunner_run_all(srunner, CK_ENV); /* set CK_VEBOSITY in ENV to customize */
     nfail = srunner_ntests_failed(srunner);
     srunner_free(srunner);
 
-    unlink(TEST_DATAFILE);
+    /* teardown */
+    test_teardown();
 
     return (nfail == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

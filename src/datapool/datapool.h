@@ -1,11 +1,34 @@
 #pragma once
 
+#include <cc_option.h>
 #include <stddef.h>
 #include <stdbool.h>
+
+#define DATAPOOL_PATH NULL
+#define DATAPOOL_PREFAULT false
+
+/*          name                type                    default             description */
+#define DATAPOOL_OPTION(ACTION)  \
+    ACTION( datapool_path,      OPTION_TYPE_STR,        DATAPOOL_PATH,      "path to data pool" ) \
+    ACTION( datapool_prefault,  OPTION_TYPE_BOOL,       DATAPOOL_PREFAULT,  "prefault datapool" )
+
+typedef struct {
+    DATAPOOL_OPTION(OPTION_DECLARE)
+} datapool_options_st;
+
+typedef enum datapool_medium {
+    DATAPOOL_MEDIUM_SHM        = 0,
+    DATAPOOL_MEDIUM_PMEM       = 1
+} datapool_medium_e;
+
 struct datapool;
 
-struct datapool *datapool_open(const char *path, size_t size,
-    int *fresh, bool prefault);
+datapool_medium_e datapool_get_medium(void);
+
+void datapool_setup(datapool_options_st *options);
+void datapool_teardown(void);
+
+struct datapool *datapool_open(size_t size, int *fresh);
 void datapool_close(struct datapool *pool);
 
 void *datapool_addr(struct datapool *pool);
