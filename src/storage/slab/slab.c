@@ -170,10 +170,10 @@ _slab_recreate_items(struct slab *slab)
 
     p = &slabclass[slab->id];
     p->nfree_item = p->nitem;
-    p->next_item_in_slab = (struct item *)&slab->data[0];
     for (i = 0; i < p->nitem; i++) {
         it = _slab_to_item(slab, i, p->size);
         if (it->is_linked) {
+            p->next_item_in_slab = (struct item *)&slab->data[0];
             INCR(slab_metrics, item_curr);
             INCR(slab_metrics, item_alloc);
             PERSLAB_INCR(slab->id, item_curr);
@@ -230,6 +230,7 @@ _slab_recovery(void)
     uint8_t *heap_start = heapinfo.curr;
 
     _slab_lruq_rebuild(heap_start);
+
     for (i = 0; i < heapinfo.max_nslab; i++) {
         struct slab *slab = (struct slab *) heap_start;
         if (slab->initialized) {
