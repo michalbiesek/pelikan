@@ -223,6 +223,19 @@ benchmark_run_operation(struct benchmark *b,
     return status;
 }
 
+static void
+shuffle(struct array *arr, size_t n)
+{
+   if (n > 1) {
+        for (size_t i = 0; i < n - 1; ++i) {
+          size_t j = i + (size_t)(rand_r(&(rseed))) / (RAND_MAX / (n - i) + 1);
+          struct array t = arr[j];
+          arr[j] = arr[i];
+          arr[i] = t;
+        }
+    }
+}
+
 static struct duration
 benchmark_run(struct benchmark *b)
 {
@@ -251,7 +264,7 @@ benchmark_run(struct benchmark *b)
     for (size_t i = 0; i < O(b, nops); ++i) {
         if (array_nelem(in) == 0) {
             SWAP(in, in2);
-            /* XXX: array_shuffle(in) */
+            shuffle(in, O(b, nops));
         }
 
         unsigned pct = RRAND(0, 100);
