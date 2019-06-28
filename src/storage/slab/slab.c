@@ -217,22 +217,32 @@ _slab_lruq_rebuild(uint8_t *heap_start)
 
     struct slab *slab = (void *)((uint8_t *)heap_metadata.slab_lruq_head + offset);
 
-//    TAILQ_REINIT(&heapinfo.slab_lruq, slab, s_tqe, offset);
+    TAILQ_REINIT(&heapinfo.slab_lruq, slab, s_tqe, offset);
+//(&heapinfo.slab_lruq)->tqh_last = &TAILQ_NEXT((slab), s_tqe);   \
+//INSERT TAIL
 
-    TAILQ_FIRST((&heapinfo.slab_lruq)) = slab;                                          \
-    *(&heapinfo.slab_lruq)->tqh_last = NULL;                                           \
-    TAILQ_FOREACH(slab, &heapinfo.slab_lruq, s_tqe) {                                   \
-        if ((TAILQ_NEXT((slab), s_tqe)) != NULL) {                       \
-            TAILQ_NEXT((slab), s_tqe) =                                  \
-                (void *)((char *)(TAILQ_NEXT((slab), s_tqe)) + (offset));\
-        }                                                               \
-        if ((slab) == TAILQ_FIRST(&heapinfo.slab_lruq)) {                               \
-            (slab)->s_tqe.tqe_prev = &TAILQ_FIRST(&heapinfo.slab_lruq);                 \
-        } else {                                                        \
-            (slab)->s_tqe.tqe_prev =                                     \
-                (void *)((char *)((slab)->s_tqe.tqe_prev) + (offset));   \
-        }                                                               \
-    }
+//    struct slab* saved = TAILQ_NEXT((slab), s_tqe);
+//    TAILQ_NEXT((slab), s_tqe) = NULL;                                    \
+//    (slab)->s_tqe.tqe_prev = (&heapinfo.slab_lruq)->tqh_last;                           \
+//    *(&heapinfo.slab_lruq)->tqh_last = (slab);                                          \
+//    (&heapinfo.slab_lruq)->tqh_last = &TAILQ_NEXT((slab), s_tqe);                       \
+//    TAILQ_NEXT((slab), s_tqe) = saved;
+//REBUILD
+//    TAILQ_FIRST((&heapinfo.slab_lruq)) = slab;                                          \
+//    TAILQ_FOREACH(slab, &heapinfo.slab_lruq, s_tqe) {                                   \
+//        if ((TAILQ_NEXT((slab), s_tqe)) != NULL) {                       \
+//            TAILQ_NEXT((slab), s_tqe) =                                  \
+//                (void *)((char *)(TAILQ_NEXT((slab), s_tqe)) + (offset));\
+//        }                                                               \
+//        if ((slab) == TAILQ_FIRST(&heapinfo.slab_lruq)) {                               \
+//            (slab)->s_tqe.tqe_prev = &TAILQ_FIRST(&heapinfo.slab_lruq);                 \
+//        } else {                                                        \
+//            (slab)->s_tqe.tqe_prev =                                     \
+//                (void *)((char *)((slab)->s_tqe.tqe_prev) + (offset));   \
+//        }                                                               \
+//        (&heapinfo.slab_lruq)->tqh_last = &TAILQ_NEXT((slab), s_tqe);   \
+//    }
+
 }
 
 /*
