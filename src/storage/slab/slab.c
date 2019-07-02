@@ -228,7 +228,7 @@ static void
 _slab_recovery(void)
 {
     uint32_t i;
-    uint8_t * heap_start = datapool_addr(pool_slab);
+    uint8_t * heap_start = heapinfo.curr;
 
     _slab_lruq_rebuild(heap_start);
     for(i = 0; i < heapinfo.max_nslab; i++) {
