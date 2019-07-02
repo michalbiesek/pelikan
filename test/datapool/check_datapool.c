@@ -25,7 +25,7 @@ test_teardown(const char* str)
 START_TEST(test_datapool)
 {
     int fresh = 0;
-    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, &fresh);
+    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, &fresh, false);
     ck_assert_ptr_nonnull(pool);
     size_t s = datapool_size(pool);
     ck_assert_int_ge(s, TEST_DATASIZE);
@@ -33,7 +33,7 @@ START_TEST(test_datapool)
     ck_assert_ptr_nonnull(datapool_addr(pool));
     datapool_close(pool);
 
-    pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, &fresh);
+    pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, &fresh, false);
     ck_assert_ptr_nonnull(pool);
     ck_assert_int_eq(s, datapool_size(pool));
     ck_assert_int_eq(fresh, 0);
@@ -45,7 +45,7 @@ END_TEST
 START_TEST(test_devzero)
 {
     int fresh = 0;
-    struct datapool *pool = datapool_open(NULL, TEST_DATA_NAME, TEST_DATASIZE, &fresh);
+    struct datapool *pool = datapool_open(NULL, TEST_DATA_NAME, TEST_DATASIZE, &fresh, false);
     ck_assert_ptr_nonnull(pool);
     size_t s = datapool_size(pool);
     ck_assert_int_ge(s, TEST_DATASIZE);
@@ -53,7 +53,7 @@ START_TEST(test_devzero)
     ck_assert_ptr_nonnull(datapool_addr(pool));
     datapool_close(pool);
 
-    pool = datapool_open(NULL, TEST_DATA_NAME, TEST_DATASIZE, &fresh);
+    pool = datapool_open(NULL, TEST_DATA_NAME, TEST_DATASIZE, &fresh, false);
     ck_assert_ptr_nonnull(pool);
     ck_assert_int_eq(s, datapool_size(pool));
     ck_assert_int_eq(fresh, 1);
@@ -62,9 +62,18 @@ START_TEST(test_devzero)
 }
 END_TEST
 
+START_TEST(test_datapool_prealloc)
+{
+    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, NULL, true);
+    ck_assert_ptr_nonnull(pool);
+    datapool_close(pool);
+    test_teardown(TEST_DATAFILE);
+}
+END_TEST
+
 START_TEST(test_datapool_empty_signature)
 {
-    struct datapool *pool = datapool_open(TEST_DATAFILE, NULL, TEST_DATASIZE, NULL);
+    struct datapool *pool = datapool_open(TEST_DATAFILE, NULL, TEST_DATASIZE, NULL, false);
     ck_assert_ptr_null(pool);
 }
 END_TEST
@@ -72,7 +81,7 @@ END_TEST
 START_TEST(test_datapool_too_long_signature)
 {
 #define LONG_SIGNATURE "Lorem ipsum dolor sit amet, consectetur volutpat"
-    struct datapool *pool = datapool_open(TEST_DATAFILE, LONG_SIGNATURE, TEST_DATASIZE, NULL);
+    struct datapool *pool = datapool_open(TEST_DATAFILE, LONG_SIGNATURE, TEST_DATASIZE, NULL, false);
     ck_assert_ptr_null(pool);
 #undef LONG_SIGNATURE
 }
@@ -93,7 +102,7 @@ START_TEST(test_datapool_wrong_signature_long_variant)
 {
 #define WRONG_POOL_NAME_LONG_VAR "datapool_pelikan_no_exist"
     int fresh = 0;
-    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, &fresh);
+    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, &fresh, false);
     ck_assert_ptr_nonnull(pool);
     size_t s = datapool_size(pool);
     ck_assert_int_ge(s, TEST_DATASIZE);
@@ -101,7 +110,7 @@ START_TEST(test_datapool_wrong_signature_long_variant)
     ck_assert_ptr_nonnull(datapool_addr(pool));
     datapool_close(pool);
 
-    pool = datapool_open(TEST_DATAFILE, WRONG_POOL_NAME_LONG_VAR, TEST_DATASIZE, NULL);
+    pool = datapool_open(TEST_DATAFILE, WRONG_POOL_NAME_LONG_VAR, TEST_DATASIZE, NULL, false);
     ck_assert_ptr_null(pool);
     test_teardown(TEST_DATAFILE);
 #undef WRONG_POOL_NAME_LONG_VAR
@@ -112,7 +121,7 @@ START_TEST(test_datapool_wrong_signature_short_variant)
 {
 #define WRONG_POOL_NAME_SHORT_VAR "datapool"
     int fresh = 0;
-    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, &fresh);
+    struct datapool *pool = datapool_open(TEST_DATAFILE, TEST_DATA_NAME, TEST_DATASIZE, &fresh, false);
     ck_assert_ptr_nonnull(pool);
     size_t s = datapool_size(pool);
     ck_assert_int_ge(s, TEST_DATASIZE);
@@ -120,7 +129,7 @@ START_TEST(test_datapool_wrong_signature_short_variant)
     ck_assert_ptr_nonnull(datapool_addr(pool));
     datapool_close(pool);
 
-    pool = datapool_open(TEST_DATAFILE, WRONG_POOL_NAME_SHORT_VAR, TEST_DATASIZE, NULL);
+    pool = datapool_open(TEST_DATAFILE, WRONG_POOL_NAME_SHORT_VAR, TEST_DATASIZE, NULL, false);
     ck_assert_ptr_null(pool);
     test_teardown(TEST_DATAFILE);
 #undef WRONG_POOL_NAME_SHORT_VAR
@@ -138,6 +147,7 @@ datapool_suite(void)
     TCase *tc_pool = tcase_create("pool");
     tcase_add_test(tc_pool, test_datapool);
     tcase_add_test(tc_pool, test_devzero);
+    tcase_add_test(tc_pool, test_datapool_prealloc);
     tcase_add_test(tc_pool, test_datapool_max_length_signature);
     tcase_add_test(tc_pool, test_datapool_empty_signature);
     tcase_add_test(tc_pool, test_datapool_too_long_signature);
