@@ -46,6 +46,7 @@ Currently Pelikan yields three main products, all of which are backends/servers.
 - platform: Mac OS X or Linux
 - build tools: `cmake (>=2.8)`
 - compiler: `gcc (>=4.8)` or `clang (>=3.1)`
+- (optional) low-level persistent memory support library: `libpmem (>=1.0)`
 - (optional) unit testing framework: `check (>=0.10.0)`. See below.
 
 ## Build
