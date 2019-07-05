@@ -108,6 +108,15 @@ configure_file(
   "${PROJECT_SOURCE_DIR}/config.h.in"
   "${PROJECT_BINARY_DIR}/config.h")
 
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Og")
+else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
+endif()
 
 ##########################
 # other compiler options #
@@ -121,7 +130,7 @@ add_definitions(-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64)
 set(CMAKE_MACOSX_RPATH 1)
 set(CFLAGS_LIST
     "-std=c11 "
-    "-ggdb3 -O2 "
+    "-ggdb3 "
     "-Wall "
     "-Wmissing-prototypes -Wmissing-declarations -Wredundant-decls "
     "-Wunused-function -Wunused-value -Wunused-variable "
@@ -190,6 +199,8 @@ endif()
 ###################
 # print a summary #
 ###################
+
+message(STATUS "CMAKE_BUILD_TYPE: " ${CMAKE_BUILD_TYPE})
 
 message(STATUS "PLATFORM: " ${OS_PLATFORM})
 
