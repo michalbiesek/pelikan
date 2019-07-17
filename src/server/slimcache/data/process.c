@@ -447,8 +447,17 @@ process_request(struct response *rsp, struct request *req)
 }
 
 static inline void
-_cleanup(struct request **req, struct response **rsp)
+_cleanup(struct request **req, struct response **rsp, void **data)
 {
+    struct request *req_partial = *data;
+
+    /* release request partial data */
+    if (req_partial != NULL) {
+        request_return(&req_partial);
+    }
+
+    *data = NULL;
+
     request_return(req);
     response_return_all(rsp);
 }
@@ -469,6 +478,10 @@ slimcache_process_read(struct buf **rbuf, struct buf **wbuf, void **data)
         INCR(process_metrics, process_ex);
 
         return -1;
+    }
+
+    if (*data == NULL) {
+        *data = req;
     }
 
     /* keep parse-process-compose until running out of data in rbuf */
@@ -549,13 +562,13 @@ slimcache_process_read(struct buf **rbuf, struct buf **wbuf, void **data)
 
         /* logging, clean-up */
         klog_write(req, rsp);
-        _cleanup(&req, &rsp);
+        _cleanup(&req, &rsp, data);
     }
 
     return 0;
 
 error:
-    _cleanup(&req, &rsp);
+    _cleanup(&req, &rsp, data);
     return -1;
 }
 
