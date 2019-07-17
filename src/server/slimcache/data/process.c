@@ -14,6 +14,12 @@
 #define DELTA_ERR_MSG "value is not a number"
 #define OTHER_ERR_MSG "command not supported"
 
+typedef enum put_rstatus {
+    PUT_OK,
+    PUT_PARTIAL,
+    PUT_ERROR,
+} put_rstatus_e;
+
 static bool process_init = false;
 static process_metrics_st *process_metrics = NULL;
 static bool allow_flush = ALLOW_FLUSH;
@@ -49,6 +55,35 @@ process_teardown(void)
     allow_flush = false;
 }
 
+static put_rstatus_e
+_put_key(struct bstring *key, struct request *req)
+{
+    put_rstatus_e status;
+    if (req->first) { /* self-contained req */
+//        *key = array_first(req->keys);
+        req->first = false;
+    }
+    else {
+
+    }
+
+    if (!req->partial) {
+        status = PUT_OK;
+    } else { /* should not update hash */
+        status = PUT_PARTIAL;
+    }
+
+    if (status == PUT_ERROR) {
+        req->swallow = true;
+        req->serror = true;
+    }
+
+    if (status == PUT_OK) { /* set flag when put is complete */
+//        _set_dataflag(it, req->flag);
+    }
+
+    return status;
+}
 
 static bool
 _get_key(struct response *rsp, struct bstring *key)
@@ -191,8 +226,13 @@ _process_set(struct response *rsp, struct request *req)
     struct item *it;
     struct val val;
 
+    if (_put_key(key, req) == PUT_PARTIAL)
+    {
+        return;
+    }
+
     INCR(process_metrics, set);
-    key = array_first(req->keys);
+
     expire = time_convert_proc_sec((time_i)req->expiry);
     _get_value(&val, &req->vstr);
 
@@ -449,6 +489,7 @@ process_request(struct response *rsp, struct request *req)
 static inline void
 _cleanup(struct request **req, struct response **rsp)
 {
+    request_reset(*req);
     request_return(req);
     response_return_all(rsp);
 }
@@ -462,13 +503,16 @@ slimcache_process_read(struct buf **rbuf, struct buf **wbuf, void **data)
 
     log_verb("post-read processing");
 
-    req = request_borrow();
+    req = *data;
     if (req == NULL) {
-        /* TODO(yao): simply return for now, better to respond with OOM */
-        log_error("cannot acquire request: OOM");
-        INCR(process_metrics, process_ex);
+        req = *data = request_borrow();
+        if (req == NULL) {
+            /* TODO(yao): simply return for now, better to respond with OOM */
+            log_error("cannot acquire request: OOM");
+            INCR(process_metrics, process_ex);
 
-        return -1;
+            return -1;
+        }
     }
 
     /* keep parse-process-compose until running out of data in rbuf */
@@ -482,8 +526,7 @@ slimcache_process_read(struct buf **rbuf, struct buf **wbuf, void **data)
 
         old_rpos = (*rbuf)->rpos;
         status = parse_req(req, *rbuf);
-        if (status == PARSE_EUNFIN || req->partial) { /* ignore partial */
-            (*rbuf)->rpos = old_rpos;
+        if (status == PARSE_EUNFIN) {
             buf_lshift(*rbuf);
             return 0;
         }
@@ -528,6 +571,11 @@ slimcache_process_read(struct buf **rbuf, struct buf **wbuf, void **data)
 
         /* actual processing & command logging */
         process_request(rsp, req);
+
+        if (req->partial) {
+            buf_lshift(*rbuf);
+            return 0;
+        }
 
         /* stage 3: write response(s) */
 
@@ -575,6 +623,8 @@ slimcache_process_write(struct buf **rbuf, struct buf **wbuf, void **data)
 int
 slimcache_process_error(struct buf **rbuf, struct buf **wbuf, void **data)
 {
+     struct request *req = *data;
+
     log_verb("post-error processing");
 
     /* normalize buffer size */
@@ -582,6 +632,13 @@ slimcache_process_error(struct buf **rbuf, struct buf **wbuf, void **data)
     dbuf_shrink(rbuf);
     buf_reset(*wbuf);
     dbuf_shrink(wbuf);
+
+    /* release request data */
+    if (req != NULL) {
+        request_return(&req);
+    }
+
+    *data = NULL;
 
     return 0;
 }
